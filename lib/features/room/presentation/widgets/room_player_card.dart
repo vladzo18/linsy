@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linsy/features/room/player/player_surface.dart';
 
+import '../../../library/application/saved_tracks_controller.dart';
 import '../../domain/models/playback_state.dart';
 import 'playback_timeline.dart';
 import 'player_volume_control.dart';
@@ -101,6 +103,7 @@ class RoomPlayerCard extends StatelessWidget {
                       // BUTTONS
                       // ===========================================
                       _PlayerControlsRow(
+                        playback: playback,
                         isPlaying: playback.isPlaying,
                         canControlPlayback: canControlPlayback,
                         compact: compact,
@@ -187,12 +190,15 @@ class _StartQueueControls extends StatelessWidget {
 
 class _PlayerControlsRow extends StatelessWidget {
   const _PlayerControlsRow({
+    required this.playback,
     required this.isPlaying,
     required this.canControlPlayback,
     required this.compact,
     required this.onPlayPause,
     required this.onNext,
   });
+
+  final PlaybackState playback;
 
   final bool isPlaying;
 
@@ -270,9 +276,126 @@ class _PlayerControlsRow extends StatelessWidget {
             ),
           ),
 
-          SizedBox(width: sideWidth),
+          // =======================================================
+          // SAVE TRACK
+          // =======================================================
+          SizedBox(
+            width: sideWidth,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _SaveTrackButton(playback: playback, compact: compact),
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+// =====================================================================
+// SAVE TRACK
+// =====================================================================
+
+class _SaveTrackButton extends ConsumerStatefulWidget {
+  const _SaveTrackButton({required this.playback, required this.compact});
+
+  final PlaybackState playback;
+
+  final bool compact;
+
+  @override
+  ConsumerState<_SaveTrackButton> createState() => _SaveTrackButtonState();
+}
+
+class _SaveTrackButtonState extends ConsumerState<_SaveTrackButton> {
+  bool _changing = false;
+
+  Future<void> _toggleSaved() async {
+    if (_changing) {
+      return;
+    }
+
+    final trackId = widget.playback.trackId?.trim();
+    final source = widget.playback.source?.trim();
+
+    if (trackId == null ||
+        trackId.isEmpty ||
+        source == null ||
+        source.isEmpty) {
+      return;
+    }
+
+    final controller = ref.read(savedTracksControllerProvider.notifier);
+
+    final isSaved = controller.isSaved(source: source, trackId: trackId);
+
+    setState(() {
+      _changing = true;
+    });
+
+    try {
+      if (isSaved) {
+        await controller.removeTrack(source: source, trackId: trackId);
+      } else {
+        final title = widget.playback.title?.trim();
+
+        await controller.saveTrack(
+          source: source,
+          trackId: trackId,
+          title: title == null || title.isEmpty ? trackId : title,
+          channelTitle: '',
+          thumbnailUrl: widget.playback.thumbnailUrl,
+          durationMs: widget.playback.durationMs,
+        );
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('Failed to update saved tracks: $error')),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _changing = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final savedState = ref.watch(savedTracksControllerProvider);
+
+    final trackId = widget.playback.trackId?.trim();
+    final source = widget.playback.source?.trim();
+
+    final validTrack =
+        trackId != null &&
+        trackId.isNotEmpty &&
+        source != null &&
+        source.isNotEmpty;
+
+    final savedTracks = savedState.value;
+
+    final isSaved =
+        validTrack &&
+        savedTracks != null &&
+        savedTracks.any(
+          (track) => track.source == source && track.trackId == trackId,
+        );
+
+    return IconButton(
+      tooltip: isSaved ? 'Remove from saved' : 'Save track',
+      onPressed: validTrack && !_changing ? _toggleSaved : null,
+      icon: Icon(
+        isSaved ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+      ),
+      iconSize: widget.compact ? 23 : 25,
     );
   }
 }

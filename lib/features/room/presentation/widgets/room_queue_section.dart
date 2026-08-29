@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/models/playback_state.dart';
 import '../../domain/models/room_queue_item.dart';
+import '../controllers/playback_controller.dart';
 import '../controllers/queue_controller.dart';
 import '../controllers/room_state.dart';
 import 'track_search_dialog.dart';
@@ -37,6 +39,8 @@ class RoomQueueSection extends ConsumerWidget {
 
     final queueState = ref.watch(queueControllerProvider(roomId));
 
+    final playbackState = ref.watch(playbackControllerProvider(roomId));
+
     final canManage = currentMember.canControlPlayback;
 
     return queueState.when(
@@ -54,53 +58,49 @@ class RoomQueueSection extends ConsumerWidget {
       // DATA
       // ===========================================================
       data: (items) {
-        if (items.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.all(12),
-            child: _EmptyQueue(
-              canManage: canManage,
-              onAddTrack: canManage ? () => _addTrack(context, ref) : null,
-            ),
-          );
-        }
-
         return Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           child: Column(
             children: [
               // ===================================================
-              // ADD TRACK
+              // QUEUE STATUS
               // ===================================================
-              if (canManage) ...[
-                Center(
-                  child: FilledButton.tonalIcon(
-                    onPressed: () => _addTrack(context, ref),
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Add track'),
-                  ),
-                ),
+              _QueueStatusHeader(
+                playbackState: playbackState,
+                items: items,
+                canManage: canManage,
+                onAddTrack: canManage ? () => _addTrack(context, ref) : null,
+              ),
 
-                const SizedBox(height: 14),
-              ],
+              const SizedBox(height: 14),
 
+              // ===================================================
+              // EMPTY
+              // ===================================================
+              if (items.isEmpty)
+                const Expanded(child: _EmptyQueue())
               // ===================================================
               // QUEUE
               // ===================================================
-              Expanded(
-                child: canManage
-                    ? _DraggableQueue(
-                        roomId: roomId,
-                        items: items,
-                        onRemove: (itemId) =>
-                            _removeTrack(context, ref, itemId),
-                        onReorder: (itemId, newIndex) {
-                          return ref
-                              .read(queueControllerProvider(roomId).notifier)
-                              .reorderItem(itemId: itemId, newIndex: newIndex);
-                        },
-                      )
-                    : _ReadOnlyQueue(items: items),
-              ),
+              else
+                Expanded(
+                  child: canManage
+                      ? _DraggableQueue(
+                          roomId: roomId,
+                          items: items,
+                          onRemove: (itemId) =>
+                              _removeTrack(context, ref, itemId),
+                          onReorder: (itemId, newIndex) {
+                            return ref
+                                .read(queueControllerProvider(roomId).notifier)
+                                .reorderItem(
+                                  itemId: itemId,
+                                  newIndex: newIndex,
+                                );
+                          },
+                        )
+                      : _ReadOnlyQueue(items: items),
+                ),
             ],
           ),
         );
@@ -168,6 +168,336 @@ class RoomQueueSection extends ConsumerWidget {
 }
 
 // =====================================================================
+// QUEUE STATUS HEADER
+// =====================================================================
+
+class _QueueStatusHeader extends StatelessWidget {
+  const _QueueStatusHeader({
+    required this.playbackState,
+    required this.items,
+    required this.canManage,
+    required this.onAddTrack,
+  });
+
+  final AsyncValue<PlaybackState> playbackState;
+
+  final List<RoomQueueItem> items;
+
+  final bool canManage;
+
+  final VoidCallback? onAddTrack;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final playback = playbackState.value;
+
+    final playbackLoading = playbackState.isLoading && playback == null;
+
+    final playbackUnavailable = playbackState.hasError && playback == null;
+
+    final hasTrack = playback != null && playback.trackId != null;
+
+    final totalDurationMs = items.fold<int>(
+      0,
+      (total, item) => total + (item.durationMs ?? 0),
+    );
+
+    final hasUnknownDuration = items.any((item) => item.durationMs == null);
+
+    final durationText = hasUnknownDuration
+        ? totalDurationMs > 0
+              ? '≥ ${_formatDuration(totalDurationMs)}'
+              : 'Unknown'
+        : _formatDuration(totalDurationMs);
+
+    final trackCountText =
+        '${items.length} '
+        '${items.length == 1 ? 'track' : 'tracks'}';
+
+    String title;
+
+    if (playbackLoading) {
+      title = 'Loading playback...';
+    } else if (playbackUnavailable) {
+      title = 'Playback unavailable';
+    } else if (!hasTrack) {
+      title = 'Nothing playing';
+    } else {
+      final playbackTitle = playback.title?.trim();
+
+      title = playbackTitle != null && playbackTitle.isNotEmpty
+          ? playbackTitle
+          : playback.trackId!;
+    }
+
+    final thumbnailUrl = hasTrack ? playback.thumbnailUrl : null;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.60),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // =========================================================
+          // PLAYBACK + ADD
+          // =========================================================
+          Row(
+            children: [
+              _CurrentTrackThumbnail(
+                url: thumbnailUrl,
+                loading: playbackLoading,
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    if (playbackLoading)
+                      const _PlaybackStatusBadge.loading()
+                    else if (playbackUnavailable)
+                      const _PlaybackStatusBadge.unavailable()
+                    else if (!hasTrack)
+                      const _PlaybackStatusBadge.idle()
+                    else
+                      _PlaybackStatusBadge(isPlaying: playback.isPlaying),
+                  ],
+                ),
+              ),
+
+              if (canManage && onAddTrack != null) ...[
+                const SizedBox(width: 12),
+
+                FilledButton.tonalIcon(
+                  onPressed: onAddTrack,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Add track'),
+                ),
+              ],
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          Divider(
+            height: 1,
+            color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+          ),
+
+          const SizedBox(height: 10),
+
+          // =========================================================
+          // QUEUE STATS
+          // =========================================================
+          Wrap(
+            spacing: 7,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Icon(
+                Icons.queue_music_rounded,
+                size: 17,
+                color: colorScheme.onSurfaceVariant,
+              ),
+
+              Text(
+                trackCountText,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+
+              Text('•', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+
+              Icon(
+                Icons.schedule_rounded,
+                size: 16,
+                color: colorScheme.onSurfaceVariant,
+              ),
+
+              Text(
+                'Queue duration $durationText',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =====================================================================
+// CURRENT TRACK THUMBNAIL
+// =====================================================================
+
+class _CurrentTrackThumbnail extends StatelessWidget {
+  const _CurrentTrackThumbnail({required this.url, required this.loading});
+
+  final String? url;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(9),
+      child: SizedBox(
+        width: 64,
+        height: 36,
+        child: loading
+            ? ColoredBox(
+                color: colorScheme.surfaceContainerHighest,
+                child: const Center(
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              )
+            : url == null || url!.isEmpty
+            ? ColoredBox(
+                color: colorScheme.surfaceContainerHighest,
+                child: Icon(
+                  Icons.music_note_rounded,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            : Image.network(
+                url!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return ColoredBox(
+                    color: colorScheme.surfaceContainerHighest,
+                    child: Icon(
+                      Icons.music_note_rounded,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+// =====================================================================
+// PLAYBACK STATUS
+// =====================================================================
+
+class _PlaybackStatusBadge extends StatelessWidget {
+  const _PlaybackStatusBadge({required bool isPlaying})
+    : _state = isPlaying
+          ? _PlaybackVisualState.playing
+          : _PlaybackVisualState.paused;
+
+  const _PlaybackStatusBadge.loading() : _state = _PlaybackVisualState.loading;
+
+  const _PlaybackStatusBadge.unavailable()
+    : _state = _PlaybackVisualState.unavailable;
+
+  const _PlaybackStatusBadge.idle() : _state = _PlaybackVisualState.idle;
+
+  final _PlaybackVisualState _state;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final IconData icon;
+    final String label;
+
+    switch (_state) {
+      case _PlaybackVisualState.playing:
+        icon = Icons.play_arrow_rounded;
+        label = 'Playing';
+
+      case _PlaybackVisualState.paused:
+        icon = Icons.pause_rounded;
+        label = 'Paused';
+
+      case _PlaybackVisualState.idle:
+        icon = Icons.stop_rounded;
+        label = 'Idle';
+
+      case _PlaybackVisualState.loading:
+        icon = Icons.sync_rounded;
+        label = 'Loading';
+
+      case _PlaybackVisualState.unavailable:
+        icon = Icons.cloud_off_outlined;
+        label = 'Unavailable';
+    }
+
+    final highlighted = _state == _PlaybackVisualState.playing;
+
+    final backgroundColor = highlighted
+        ? colorScheme.primaryContainer
+        : colorScheme.surfaceContainerHighest;
+
+    final foregroundColor = highlighted
+        ? colorScheme.onPrimaryContainer
+        : colorScheme.onSurfaceVariant;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: foregroundColor),
+
+            const SizedBox(width: 3),
+
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: foregroundColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _PlaybackVisualState { playing, paused, idle, loading, unavailable }
+
+// =====================================================================
 // DRAGGABLE QUEUE
 // =====================================================================
 
@@ -225,11 +555,6 @@ class _DraggableQueueState extends State<_DraggableQueue> {
     }
 
     setState(() {
-      // Freeze только визуального drag snapshot.
-      //
-      // Если в этот момент на другом устройстве
-      // изменится queue, элемент под курсором
-      // не будет внезапно прыгать.
       _dragItems = List<RoomQueueItem>.from(widget.items);
     });
   }
@@ -243,9 +568,6 @@ class _DraggableQueueState extends State<_DraggableQueue> {
       return;
     }
 
-    // Drop уже принят и RPC выполняется.
-    //
-    // _dropOnIndex сам очистит snapshot.
     if (_saving) {
       return;
     }
@@ -296,15 +618,6 @@ class _DraggableQueueState extends State<_DraggableQueue> {
     });
 
     try {
-      // QueueController:
-      //
-      // 1. optimistic state
-      // 2. RPC
-      // 3. authoritative SELECT
-      //
-      // Поэтому widget больше не пытается
-      // самостоятельно решить,
-      // какой snapshot "свежее".
       await widget.onReorder(itemId, targetIndex);
     } catch (error) {
       if (!mounted) {
@@ -329,10 +642,6 @@ class _DraggableQueueState extends State<_DraggableQueue> {
       setState(() {
         _saving = false;
 
-        // Возвращаемся к единственному
-        // source of truth:
-        //
-        // QueueController → widget.items.
         _dragItems = null;
       });
     }
@@ -408,6 +717,7 @@ class _DraggableQueueState extends State<_DraggableQueue> {
     );
   }
 }
+
 // =====================================================================
 // DROP TARGET
 // =====================================================================
@@ -438,11 +748,9 @@ class _QueueDropTarget extends StatelessWidget {
       onWillAcceptWithDetails: (details) {
         return enabled && details.data != itemId;
       },
-
       onAcceptWithDetails: (details) {
         unawaited(onDrop(details.data, targetIndex));
       },
-
       builder: (context, candidateData, rejectedData) {
         final hovering =
             enabled &&
@@ -546,40 +854,27 @@ class _QueueDragHandle extends StatelessWidget {
     if (isDesktop) {
       return Draggable<String>(
         data: itemId,
-
         maxSimultaneousDrags: 1,
-
         feedback: dragFeedback,
-
         feedbackOffset: const Offset(-20, -20),
-
         childWhenDragging: Opacity(opacity: 0.30, child: handle),
-
         onDragStarted: onDragStarted,
-
         onDragEnd: (_) {
           onDragEnded();
         },
-
         child: MouseRegion(cursor: SystemMouseCursors.grab, child: handle),
       );
     }
 
     return LongPressDraggable<String>(
       data: itemId,
-
       maxSimultaneousDrags: 1,
-
       feedback: dragFeedback,
-
       childWhenDragging: Opacity(opacity: 0.30, child: handle),
-
       onDragStarted: onDragStarted,
-
       onDragEnd: (_) {
         onDragEnded();
       },
-
       child: handle,
     );
   }
@@ -816,18 +1111,15 @@ class _QueueThumbnail extends StatelessWidget {
 // =====================================================================
 
 class _EmptyQueue extends StatelessWidget {
-  const _EmptyQueue({required this.canManage, required this.onAddTrack});
-
-  final bool canManage;
-  final VoidCallback? onAddTrack;
+  const _EmptyQueue();
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
-      child: Center(
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -847,24 +1139,12 @@ class _EmptyQueue extends StatelessWidget {
             const SizedBox(height: 4),
 
             Text(
-              canManage
-                  ? 'Add something to play next.'
-                  : 'Tracks added by the host or moderators will appear here.',
+              'Add a track to continue the queue.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
-
-            if (canManage && onAddTrack != null) ...[
-              const SizedBox(height: 14),
-
-              FilledButton.tonalIcon(
-                onPressed: onAddTrack,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Add track'),
-              ),
-            ],
           ],
         ),
       ),
