@@ -354,39 +354,9 @@ class _RoomChatState extends ConsumerState<RoomChat>
                   itemBuilder: (context, index) {
                     final message = messages[index];
 
-                    // ===================================
-                    // CURRENT PROFILE
-                    // ===================================
-                    //
-                    // Сначала используем кешированный
-                    // актуальный профиль.
-                    //
-                    // Если пользователь никогда ещё
-                    // не был загружен в RoomState,
-                    // используем snapshot из сообщения.
-                    // ===================================
-
-                    final messageUser = _profileCache[message.userId];
-
-                    final replyUser = message.reply == null
-                        ? null
-                        : _profileCache[message.reply!.userId];
-
                     return RoomMessageBubble(
                       message: message,
 
-                      // ===============================
-                      // CURRENT MESSAGE PROFILE
-                      // ===============================
-                     
-                      // ===============================
-                      // CURRENT REPLY PROFILE
-                      // ===============================
-                      replyUserName: replyUser?.name ?? message.reply?.userName,
-
-                      // ===============================
-                      // MESSAGE STATE
-                      // ===============================
                       isOwn: message.isOwn(currentUserId),
 
                       currentUserId: currentUserId,

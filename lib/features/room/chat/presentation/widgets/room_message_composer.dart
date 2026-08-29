@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../profile/application/profile_store.dart';
 import '../../domain/models/room_message.dart';
 
 class RoomMessageComposer extends StatefulWidget {
@@ -118,7 +120,6 @@ class _RoomMessageComposerState extends State<RoomMessageComposer> {
     }
 
     var start = value.selection.start;
-
     var end = value.selection.end;
 
     // Иногда selection может быть -1,
@@ -260,20 +261,16 @@ class _RoomMessageComposerState extends State<RoomMessageComposer> {
 
                 child: TextField(
                   controller: _textController,
-
                   focusNode: _focusNode,
-
                   enabled: !_sending,
-
                   minLines: 1,
-
                   maxLines: 5,
-
                   maxLength: 4000,
 
                   // ВАЖНО:
                   //
-                  // Больше не ставим TextInputAction.send.
+                  // Больше не ставим
+                  // TextInputAction.send.
                   //
                   // Иначе EditableText сам пытается
                   // интерпретировать Enter как submit.
@@ -283,9 +280,7 @@ class _RoomMessageComposerState extends State<RoomMessageComposer> {
 
                   decoration: const InputDecoration(
                     hintText: 'Message...',
-
                     border: OutlineInputBorder(),
-
                     counterText: '',
                   ),
                 ),
@@ -321,7 +316,7 @@ class _RoomMessageComposerState extends State<RoomMessageComposer> {
 // REPLYING TO BAR
 // =====================================================================
 
-class _ReplyingToBar extends StatelessWidget {
+class _ReplyingToBar extends ConsumerWidget {
   const _ReplyingToBar({required this.message, required this.onCancel});
 
   final RoomMessage message;
@@ -329,7 +324,25 @@ class _ReplyingToBar extends StatelessWidget {
   final VoidCallback onCancel;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // ===============================================================
+    // PROFILE
+    // ===============================================================
+    //
+    // RoomMessage хранит только userId.
+    //
+    // Имя автора всегда разрешается через
+    // единый глобальный ProfileStore.
+    // ===============================================================
+
+    final profile = ref.watch(profileByIdProvider(message.userId));
+
+    final profileName = profile?.displayName?.trim();
+
+    final displayName = profileName != null && profileName.isNotEmpty
+        ? profileName
+        : 'Linsy user';
+
     final colors = Theme.of(context).colorScheme;
 
     return Container(
@@ -352,7 +365,7 @@ class _ReplyingToBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Replying to ${message.userName}',
+                  'Replying to $displayName',
 
                   maxLines: 1,
 
@@ -360,7 +373,6 @@ class _ReplyingToBar extends StatelessWidget {
 
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: colors.primary,
-
                     fontWeight: FontWeight.w600,
                   ),
                 ),

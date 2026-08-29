@@ -25,17 +25,12 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
     final baseQuery = _client
         .from('room_messages')
         .select('''
-        id,
-        room_id,
-        user_id,
-        content,
-        created_at,
-        reply_to_message_id,
-
-        profiles!room_messages_user_id_fkey (
-          display_name,
-          avatar_url
-        )
+          id,
+          room_id,
+          user_id,
+          content,
+          created_at,
+          reply_to_message_id
         ''')
         .eq('room_id', roomId);
 
@@ -50,6 +45,10 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
 
     // ===================================================
     // FIRST PASS
+    // ===================================================
+    //
+    // Сначала создаём обычные RoomMessage без reply.
+    // Потом отдельно соединяем reply preview.
     // ===================================================
 
     final baseMessages = <String, RoomMessage>{};
@@ -66,11 +65,12 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
     //
     // Например:
     //
-    // загружены сообщения 101..200
+    // текущая страница содержит messages 101..200
     // message 150 replies to message 20
     //
-    // message 20 отсутствует в текущей странице,
-    // поэтому догружаем только его.
+    // Message 20 отсутствует в текущем окне.
+    //
+    // Поэтому догружаем только нужные original messages.
     // ===================================================
 
     final missingReplyIds = <String>{};
@@ -112,7 +112,6 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
           replyPreview = RoomMessageReplyPreview(
             messageId: original.id,
             userId: original.userId,
-            userName: original.userName,
             content: original.content,
           );
         }
@@ -125,15 +124,19 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
           userId: baseMessage.userId,
           content: baseMessage.content,
           createdAt: baseMessage.createdAt,
-          userName: baseMessage.userName,
-          avatarUrl: baseMessage.avatarUrl,
           reply: replyPreview,
         ),
       );
     }
 
+    // SELECT выше DESC нужен для pagination,
+    // но UI работает от старых сообщений к новым.
     return messages.reversed.toList();
   }
+
+  // ===================================================
+  // LOAD MESSAGES BY IDS
+  // ===================================================
 
   Future<Map<String, RoomMessage>> _loadMessagesByIds(
     Iterable<String> messageIds,
@@ -147,16 +150,11 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
     final data = await _client
         .from('room_messages')
         .select('''
-        id,
-        room_id,
-        user_id,
-        content,
-        created_at,
-
-        profiles!room_messages_user_id_fkey (
-          display_name,
-          avatar_url
-        )
+          id,
+          room_id,
+          user_id,
+          content,
+          created_at
         ''')
         .inFilter('id', ids);
 
@@ -170,6 +168,7 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
 
     return result;
   }
+
   // ===================================================
   // WATCH
   // ===================================================
@@ -181,8 +180,6 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
     RealtimeChannel? channel;
 
     var messages = <RoomMessage>[];
-
-    final authors = <String, _CachedAuthor>{};
 
     var disposed = false;
 
@@ -214,11 +211,6 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
 
         for (final message in initialMessages) {
           byId[message.id] = message;
-
-          authors[message.userId] = _CachedAuthor(
-            name: message.userName,
-            avatarUrl: message.avatarUrl,
-          );
         }
 
         // Realtime INSERT мог прийти,
@@ -247,15 +239,10 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
       }
 
       final id = record['id'];
-
       final userId = record['user_id'];
-
       final recordRoomId = record['room_id'];
-
       final content = record['content'];
-
       final createdAtRaw = record['created_at'];
-
       final replyToMessageId = record['reply_to_message_id'];
 
       if (id is! String ||
@@ -270,27 +257,17 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
         return;
       }
 
-      // Защита от повторного Realtime event.
+      // Защита от повторного event.
       if (messages.any((message) => message.id == id)) {
-        return;
-      }
-
-      var author = authors[userId];
-
-      if (author == null) {
-        author = await _loadAuthor(userId);
-
-        authors[userId] = author;
-      }
-
-      if (disposed) {
         return;
       }
 
       RoomMessageReplyPreview? replyPreview;
 
       if (replyToMessageId is String) {
-        // Сначала ищем локально.
+        // Сначала пытаемся найти original
+        // внутри текущего realtime окна.
+
         RoomMessage? original;
 
         for (final message in messages) {
@@ -300,19 +277,30 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
           }
         }
 
-        // Если исходное сообщение уже выпало
-        // из realtime окна — догружаем только его.
+        // Если original старше realtime окна,
+        // догружаем только его.
+
         if (original == null) {
           final loaded = await _loadMessagesByIds([replyToMessageId]);
 
           original = loaded[replyToMessageId];
         }
 
+        if (disposed) {
+          return;
+        }
+
+        // Пока выполнялся SELECT,
+        // тот же Realtime event теоретически
+        // мог прийти повторно.
+        if (messages.any((message) => message.id == id)) {
+          return;
+        }
+
         if (original != null) {
           replyPreview = RoomMessageReplyPreview(
             messageId: original.id,
             userId: original.userId,
-            userName: original.userName,
             content: original.content,
           );
         }
@@ -324,8 +312,6 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
         userId: userId,
         content: content,
         createdAt: DateTime.parse(createdAtRaw).toUtc(),
-        userName: author.name,
-        avatarUrl: author.avatarUrl,
         reply: replyPreview,
       );
 
@@ -333,7 +319,11 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
 
       messages.sort(_compareMessages);
 
-      // Realtime окно держим максимум 100 сообщений.
+      // Realtime fast-path держит
+      // ограниченное окно.
+      //
+      // Полная история восстанавливается
+      // через pagination / consistency SELECT.
       if (messages.length > 100) {
         messages = messages.sublist(messages.length - 100);
       }
@@ -400,10 +390,9 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
               schema: 'public',
               table: 'room_messages',
 
-              // Здесь специально НЕТ room_id filter.
-              //
               // У DELETE oldRecord может содержать
-              // только primary key.
+              // только PK, поэтому room_id filter
+              // здесь намеренно отсутствует.
               callback: (payload) {
                 handleDelete(payload.oldRecord);
               },
@@ -432,39 +421,6 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
     );
 
     return controller.stream;
-  }
-
-  // ===================================================
-  // LOAD AUTHOR
-  // ===================================================
-
-  Future<_CachedAuthor> _loadAuthor(String userId) async {
-    final data = await _client
-        .from('profiles')
-        .select('''
-              display_name,
-              avatar_url
-              ''')
-        .eq('id', userId)
-        .maybeSingle();
-
-    if (data == null) {
-      return const _CachedAuthor(name: 'Linsy user');
-    }
-
-    final displayName = data['display_name'];
-
-    final avatar = data['avatar_url'];
-
-    return _CachedAuthor(
-      name: displayName is String && displayName.trim().isNotEmpty
-          ? displayName.trim()
-          : 'Linsy user',
-
-      avatarUrl: avatar is String && avatar.trim().isNotEmpty
-          ? avatar.trim()
-          : null,
-    );
   }
 
   // ===================================================
@@ -501,41 +457,12 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
   // ===================================================
 
   RoomMessage _mapBaseMessage(Map<String, dynamic> data) {
-    final profileData = data['profiles'];
-
-    String? displayName;
-    String? avatarUrl;
-
-    if (profileData is Map<String, dynamic>) {
-      final name = profileData['display_name'];
-
-      final avatar = profileData['avatar_url'];
-
-      if (name is String && name.trim().isNotEmpty) {
-        displayName = name.trim();
-      }
-
-      if (avatar is String && avatar.trim().isNotEmpty) {
-        avatarUrl = avatar.trim();
-      }
-    }
-
     return RoomMessage(
       id: data['id'] as String,
-
       roomId: data['room_id'] as String,
-
       userId: data['user_id'] as String,
-
       content: data['content'] as String,
-
       createdAt: DateTime.parse(data['created_at'] as String).toUtc(),
-
-      userName: displayName ?? 'Linsy user',
-
-      avatarUrl: avatarUrl,
-
-      reply: null,
     );
   }
 
@@ -552,15 +479,4 @@ class SupabaseRoomChatRepository implements RoomChatRepository {
 
     return a.id.compareTo(b.id);
   }
-}
-
-// =====================================================================
-// CACHED AUTHOR
-// =====================================================================
-
-class _CachedAuthor {
-  const _CachedAuthor({required this.name, this.avatarUrl});
-
-  final String name;
-  final String? avatarUrl;
 }

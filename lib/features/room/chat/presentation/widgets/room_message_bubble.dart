@@ -11,7 +11,6 @@ import '../reactions/reaction_catalog.dart';
 class RoomMessageBubble extends ConsumerStatefulWidget {
   const RoomMessageBubble({
     required this.message,
-    required this.replyUserName,
     required this.isOwn,
     required this.currentUserId,
     required this.reactions,
@@ -22,13 +21,8 @@ class RoomMessageBubble extends ConsumerStatefulWidget {
 
   final RoomMessage message;
 
-  /// Временный compatibility bridge.
-  ///
-  /// Уберём после того, как RoomMessageReplyPreview
-  /// будет содержать userId автора reply.
-  final String? replyUserName;
-
   final bool isOwn;
+
   final String? currentUserId;
 
   final List<RoomMessageReaction> reactions;
@@ -246,9 +240,6 @@ class _RoomMessageBubbleState extends ConsumerState<RoomMessageBubble> {
                             if (widget.message.reply != null) ...[
                               _ReplyPreview(
                                 reply: widget.message.reply!,
-                                userName:
-                                    widget.replyUserName ??
-                                    widget.message.reply!.userName,
                                 textColor: textColor,
                                 minWidth: math.max(
                                   140.0,
@@ -1106,24 +1097,29 @@ class _ReactionVisual extends StatelessWidget {
 // REPLY PREVIEW
 // =====================================================================
 
-class _ReplyPreview extends StatelessWidget {
+class _ReplyPreview extends ConsumerWidget {
   const _ReplyPreview({
     required this.reply,
-    required this.userName,
     required this.textColor,
     required this.minWidth,
   });
 
   final RoomMessageReplyPreview reply;
 
-  final String userName;
-
   final Color textColor;
 
   final double minWidth;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileByIdProvider(reply.userId));
+
+    final profileName = profile?.displayName?.trim();
+
+    final displayName = profileName != null && profileName.isNotEmpty
+        ? profileName
+        : 'Linsy user';
+
     final colors = Theme.of(context).colorScheme;
 
     return Container(
@@ -1139,7 +1135,7 @@ class _ReplyPreview extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            userName,
+            displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -1163,7 +1159,6 @@ class _ReplyPreview extends StatelessWidget {
     );
   }
 }
-
 // =====================================================================
 // MESSAGE AVATAR
 // =====================================================================

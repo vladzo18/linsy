@@ -5,21 +5,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../auth/presentation/controllers/auth_controller.dart';
+import '../../../profile/application/profile_store.dart';
 
 class ProfileSettingsSection extends ConsumerWidget {
   const ProfileSettingsSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authControllerProvider);
-
-    final user = authState.user;
+    // Auth отвечает только за identity / session / email.
+    final user = ref.watch(authControllerProvider).user;
 
     if (user == null) {
       return const SizedBox.shrink();
     }
 
-    final name = user.name?.trim();
+    // Имя и avatar всегда берём из ProfileStore.
+    final profile = ref.watch(profileByIdProvider(user.id));
+
+    final rawName = profile?.displayName?.trim();
+
+    final displayName = rawName != null && rawName.isNotEmpty
+        ? rawName
+        : 'Linsy user';
+
+    final avatarUrl = profile?.avatarUrl;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -40,8 +49,8 @@ class ProfileSettingsSection extends ConsumerWidget {
             child: Row(
               children: [
                 _ProfileAvatar(
-                  name: name,
-                  avatarUrl: user.avatarUrl,
+                  name: displayName,
+                  avatarUrl: avatarUrl,
                   radius: 30,
                 ),
 
@@ -52,7 +61,7 @@ class ProfileSettingsSection extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        name == null || name.isEmpty ? 'Linsy user' : name,
+                        displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleMedium
@@ -114,23 +123,40 @@ class EditProfilePage extends ConsumerStatefulWidget {
 class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   late final TextEditingController _nameController;
 
-  late final String _initialName;
-
   Uint8List? _avatarBytes;
-
   String? _avatarContentType;
 
   bool _saving = false;
   bool _pickingAvatar = false;
 
   // ===================================================================
-  // CHANGES
+  // ORIGINAL STATE / DIRTY STATE
   // ===================================================================
 
+  String _originalDisplayName = '';
+
+  bool _profileInitialized = false;
+
+  bool _profileInitializationScheduled = false;
+
+  bool _nameEditedByUser = false;
+
+  bool _suppressNameListener = false;
+
+  bool get _hasValidName {
+    final name = _nameController.text.trim();
+
+    return name.isNotEmpty && name.length <= 40;
+  }
+
   bool get _hasChanges {
+    if (!_profileInitialized) {
+      return false;
+    }
+
     final currentName = _nameController.text.trim();
 
-    final nameChanged = currentName != _initialName;
+    final nameChanged = currentName != _originalDisplayName;
 
     final avatarChanged = _avatarBytes != null;
 
@@ -138,21 +164,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   }
 
   bool get _canSave {
-    final displayName = _nameController.text.trim();
-
-    if (_saving || _pickingAvatar) {
-      return false;
-    }
-
-    if (displayName.isEmpty) {
-      return false;
-    }
-
-    if (displayName.length > 40) {
-      return false;
-    }
-
-    return _hasChanges;
+    return !_saving &&
+        !_pickingAvatar &&
+        _profileInitialized &&
+        _hasValidName &&
+        _hasChanges;
   }
 
   // ===================================================================
@@ -165,23 +181,19 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
     final user = ref.read(authControllerProvider).user;
 
-    _initialName = user?.name?.trim() ?? '';
+    final cachedProfile = user == null
+        ? null
+        : ref.read(profileStoreProvider)[user.id];
 
-    _nameController = TextEditingController(text: _initialName);
+    final initialName = cachedProfile?.displayName?.trim() ?? '';
 
-    _nameController.addListener(_handleFormChanged);
-  }
+    _originalDisplayName = initialName;
 
-  // ===================================================================
-  // FORM CHANGED
-  // ===================================================================
+    _profileInitialized = cachedProfile != null;
 
-  void _handleFormChanged() {
-    if (!mounted) {
-      return;
-    }
+    _nameController = TextEditingController(text: initialName);
 
-    setState(() {});
+    _nameController.addListener(_handleNameChanged);
   }
 
   // ===================================================================
@@ -190,11 +202,70 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
   @override
   void dispose() {
-    _nameController.removeListener(_handleFormChanged);
+    _nameController.removeListener(_handleNameChanged);
 
     _nameController.dispose();
 
     super.dispose();
+  }
+
+  // ===================================================================
+  // NAME CHANGED
+  // ===================================================================
+
+  void _handleNameChanged() {
+    if (_suppressNameListener) {
+      return;
+    }
+
+    _nameEditedByUser = true;
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+  }
+
+  // ===================================================================
+  // INITIALIZE PROFILE AFTER LAZY LOAD
+  // ===================================================================
+
+  void _scheduleProfileInitialization(String loadedName) {
+    if (_profileInitialized || _profileInitializationScheduled) {
+      return;
+    }
+
+    _profileInitializationScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _profileInitialized) {
+        return;
+      }
+
+      _suppressNameListener = true;
+
+      try {
+        // Если пользователь уже начал вводить имя до завершения
+        // lazy-load профиля — его текст НЕ перетираем.
+        if (!_nameEditedByUser) {
+          _nameController.value = TextEditingValue(
+            text: loadedName,
+            selection: TextSelection.collapsed(offset: loadedName.length),
+          );
+        }
+      } finally {
+        _suppressNameListener = false;
+      }
+
+      setState(() {
+        _originalDisplayName = loadedName;
+
+        _profileInitialized = true;
+
+        _profileInitializationScheduled = false;
+      });
+    });
   }
 
   // ===================================================================
@@ -265,6 +336,14 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       return;
     }
 
+    final user = ref.read(authControllerProvider).user;
+
+    if (user == null) {
+      _showMessage('You are not signed in.');
+
+      return;
+    }
+
     final displayName = _nameController.text.trim();
 
     setState(() {
@@ -273,8 +352,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
     try {
       await ref
-          .read(authControllerProvider.notifier)
+          .read(profileStoreProvider.notifier)
           .updateProfile(
+            userId: user.id,
             displayName: displayName,
             avatarBytes: _avatarBytes,
             avatarContentType: _avatarContentType,
@@ -324,10 +404,21 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       );
     }
 
+    final profile = ref.watch(profileByIdProvider(user.id));
+
+    // ProfileStore lazy-load.
+    //
+    // Если профиль уже был в кеше — всё было инициализировано
+    // ещё в initState().
+    //
+    // Если нет — спокойно ждём его здесь.
+    if (!_profileInitialized && profile != null) {
+      _scheduleProfileInitialization(profile.displayName?.trim() ?? '');
+    }
+
+    final avatarUrl = profile?.avatarUrl;
+
     return Scaffold(
-      // =================================================================
-      // APP BAR
-      // =================================================================
       appBar: AppBar(
         title: const Text('Edit profile'),
         actions: [
@@ -347,9 +438,6 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
         ],
       ),
 
-      // =================================================================
-      // BODY
-      // =================================================================
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -359,16 +447,16 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // =====================================================
+                  // ===================================================
                   // AVATAR
-                  // =====================================================
+                  // ===================================================
                   Center(
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
                         _EditableAvatar(
                           name: _nameController.text,
-                          avatarUrl: user.avatarUrl,
+                          avatarUrl: avatarUrl,
                           avatarBytes: _avatarBytes,
                         ),
 
@@ -400,9 +488,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
                   const SizedBox(height: 28),
 
-                  // =====================================================
+                  // ===================================================
                   // NAME
-                  // =====================================================
+                  // ===================================================
                   TextField(
                     controller: _nameController,
                     maxLength: 40,
@@ -421,11 +509,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
                   const SizedBox(height: 14),
 
-                  // =====================================================
+                  // ===================================================
                   // EMAIL
-                  // =====================================================
-                  TextField(
-                    controller: TextEditingController(text: user.email ?? ''),
+                  // ===================================================
+                  TextFormField(
+                    initialValue: user.email ?? '',
                     readOnly: true,
                     decoration: const InputDecoration(
                       labelText: 'Email',
@@ -438,9 +526,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
                   const SizedBox(height: 24),
 
-                  // =====================================================
+                  // ===================================================
                   // SAVE
-                  // =====================================================
+                  // ===================================================
                   FilledButton.icon(
                     onPressed: _canSave ? _save : null,
                     icon: _saving
@@ -474,7 +562,9 @@ class _EditableAvatar extends StatelessWidget {
   });
 
   final String? name;
+
   final String? avatarUrl;
+
   final Uint8List? avatarBytes;
 
   @override
@@ -512,7 +602,9 @@ class _ProfileAvatar extends StatelessWidget {
   });
 
   final String? name;
+
   final String? avatarUrl;
+
   final double radius;
 
   @override

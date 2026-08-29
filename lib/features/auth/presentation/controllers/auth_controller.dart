@@ -1,9 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
-
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../data/providers/auth_repository_provider.dart';
 import '../../domain/errors/auth_error_mapper.dart';
 import '../../domain/models/auth_result.dart';
@@ -51,10 +47,12 @@ class AuthController extends Notifier<AuthState> {
               if (user != null) {
                 state = AuthState.authenticated(user);
               }
+
               break;
 
             case AuthEvent.signedOut:
               state = const AuthState.unauthenticated();
+
               break;
 
             case AuthEvent.passwordRecovery:
@@ -63,6 +61,7 @@ class AuthController extends Notifier<AuthState> {
               if (user != null) {
                 state = AuthState.passwordRecovery(user);
               }
+
               break;
           }
         },
@@ -90,10 +89,12 @@ class AuthController extends Notifier<AuthState> {
           }
 
           state = AuthState.authenticated(user);
+
           break;
 
         case AuthResultStatus.confirmationRequired:
           state = const AuthState.emailConfirmationRequired();
+
           break;
       }
     } catch (error) {
@@ -116,10 +117,12 @@ class AuthController extends Notifier<AuthState> {
           }
 
           state = AuthState.authenticated(user);
+
           break;
 
         case AuthResultStatus.confirmationRequired:
           state = const AuthState.emailConfirmationRequired();
+
           break;
       }
     } catch (error) {
@@ -133,10 +136,8 @@ class AuthController extends Notifier<AuthState> {
 
       await _repository.signInWithGoogle();
 
-      // Do not set authenticated here.
-      //
-      // Supabase's authStateChanges stream is the
-      // single source of truth for the resulting session.
+      // Supabase authStateChanges является
+      // источником истины для новой session.
     } catch (error) {
       state = AuthState.error(AuthErrorMapper.map(error));
     }
@@ -164,6 +165,7 @@ class AuthController extends Notifier<AuthState> {
 
       if (user == null) {
         state = const AuthState.unauthenticated();
+
         return;
       }
 
@@ -171,28 +173,6 @@ class AuthController extends Notifier<AuthState> {
     } catch (error) {
       state = AuthState.error(AuthErrorMapper.map(error));
     }
-  }
-
-  // =====================================================================
-  // PROFILE
-  // =====================================================================
-
-  Future<void> updateProfile({
-    required String displayName,
-    Uint8List? avatarBytes,
-    String? avatarContentType,
-  }) async {
-    if (state.user == null) {
-      throw StateError('Cannot update profile while signed out.');
-    }
-
-    final updatedUser = await _repository.updateProfile(
-      displayName: displayName,
-      avatarBytes: avatarBytes,
-      avatarContentType: avatarContentType,
-    );
-
-    state = AuthState.authenticated(updatedUser);
   }
 
   Future<void> signOut() async {

@@ -9,6 +9,7 @@ import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../room/data/providers/room_repository_provider.dart';
 import '../controllers/home_controller.dart';
 import '../controllers/home_state.dart';
+import '../../../profile/application/profile_store.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -16,12 +17,19 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authControllerProvider);
-
     final homeAsync = ref.watch(homeControllerProvider);
 
     final user = authState.user;
 
-    final userName = user?.name?.trim();
+    final profile = user == null
+        ? null
+        : ref.watch(profileByIdProvider(user.id));
+
+    final profileName = profile?.displayName?.trim();
+
+    final displayName = profileName != null && profileName.isNotEmpty
+        ? profileName
+        : user?.email ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -89,7 +97,7 @@ class HomePage extends ConsumerWidget {
                       // =================================================
                       // WELCOME
                       // =================================================
-                      _WelcomeSection(userName: userName),
+                      _WelcomeSection(userName: displayName),
 
                       const SizedBox(height: 24),
 

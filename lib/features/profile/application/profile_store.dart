@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:developer' as developer;
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:developer' as developer;
 
 import '../../../core/lifecycle/app_lifecycle_provider.dart';
 import '../../../core/network/network_monitor_provider.dart';
@@ -47,17 +48,11 @@ class ProfileStoreController extends Notifier<Map<String, UserProfile>> {
 
     final coordinator = ProfileSyncCoordinator(
       repository: _repository,
-
       lifecycleService: ref.read(appLifecycleServiceProvider),
-
       networkMonitor: ref.read(networkMonitorProvider),
-
       recoveryCoordinator: ref.read(networkRecoveryCoordinatorProvider),
-
       readTrackedIds: () => Set<String>.unmodifiable(_trackedIds),
-
       writeProfile: _putProfile,
-
       writeProfiles: _putProfiles,
     );
 
@@ -139,13 +134,41 @@ class ProfileStoreController extends Notifier<Map<String, UserProfile>> {
   }
 
   // ===================================================
+  // UPDATE
+  // ===================================================
+
+  Future<UserProfile> updateProfile({
+    required String userId,
+    required String displayName,
+    Uint8List? avatarBytes,
+    String? avatarContentType,
+  }) async {
+    _trackedIds.add(userId);
+
+    final profile = await _repository.updateProfile(
+      userId: userId,
+      displayName: displayName,
+      avatarBytes: avatarBytes,
+      avatarContentType: avatarContentType,
+    );
+
+    // Не ждём Realtime.
+    //
+    // UPDATE вернул authoritative DB row,
+    // поэтому обновляем cache сразу.
+    _putProfile(profile);
+
+    return profile;
+  }
+
+  // ===================================================
   // LOCAL CACHE
   // ===================================================
 
   void _putProfile(UserProfile profile) {
     final current = state[profile.id];
 
-    if (current == profile) {
+    if (!_shouldApply(current, profile)) {
       return;
     }
 
@@ -162,10 +185,15 @@ class ProfileStoreController extends Notifier<Map<String, UserProfile>> {
     var changed = false;
 
     for (final profile in profiles) {
-      if (next[profile.id] != profile) {
-        next[profile.id] = profile;
-        changed = true;
+      final current = next[profile.id];
+
+      if (!_shouldApply(current, profile)) {
+        continue;
       }
+
+      next[profile.id] = profile;
+
+      changed = true;
     }
 
     if (!changed) {
@@ -173,5 +201,31 @@ class ProfileStoreController extends Notifier<Map<String, UserProfile>> {
     }
 
     state = next;
+  }
+
+  // ===================================================
+  // STALE GUARD
+  // ===================================================
+
+  bool _shouldApply(UserProfile? current, UserProfile incoming) {
+    if (current == null) {
+      return true;
+    }
+
+    if (current == incoming) {
+      return false;
+    }
+
+    final currentUpdatedAt = current.updatedAt;
+
+    final incomingUpdatedAt = incoming.updatedAt;
+
+    if (currentUpdatedAt != null &&
+        incomingUpdatedAt != null &&
+        incomingUpdatedAt.isBefore(currentUpdatedAt)) {
+      return false;
+    }
+
+    return true;
   }
 }
