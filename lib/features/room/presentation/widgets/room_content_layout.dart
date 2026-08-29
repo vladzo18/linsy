@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:linsy/features/room/domain/models/room_action_request.dart';
+import 'package:linsy/features/room/live_reactions/room_reaction_button.dart';
 import 'dart:async';
 import '../../chat/presentation/widgets/room_chat.dart';
 import '../controllers/room_state.dart';
@@ -13,6 +14,7 @@ import '../controllers/action_request_controller.dart';
 import '../controllers/queue_controller.dart';
 import '../../../../core/sounds/ui_sound.dart';
 import '../../../../core/sounds/ui_sound_provider.dart';
+import '../../live_reactions/room_live_reactions_layer.dart';
 
 class RoomContentLayout extends StatelessWidget {
   const RoomContentLayout({
@@ -42,17 +44,30 @@ class RoomContentLayout extends StatelessWidget {
           child: SizedBox(
             width: double.infinity,
             height: double.infinity,
-            child: isDesktop
-                ? _DesktopRoomLayout(
-                    roomId: roomId,
-                    roomState: roomState,
-                    currentUserId: currentUserId,
-                  )
-                : _MobileRoomLayout(
-                    roomId: roomId,
-                    roomState: roomState,
-                    currentUserId: currentUserId,
-                  ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // ===========================================================
+                // EXISTING ROOM UI
+                // ===========================================================
+                isDesktop
+                    ? _DesktopRoomLayout(
+                        roomId: roomId,
+                        roomState: roomState,
+                        currentUserId: currentUserId,
+                      )
+                    : _MobileRoomLayout(
+                        roomId: roomId,
+                        roomState: roomState,
+                        currentUserId: currentUserId,
+                      ),
+
+                // ===========================================================
+                // LIVE REACTIONS
+                // ===========================================================
+                RoomLiveReactionsLayer(roomId: roomId),
+              ],
+            ),
           ),
         );
       },
@@ -111,10 +126,11 @@ class _DesktopRoomLayout extends StatelessWidget {
                   // =================================================
                   // PARTICIPANTS
                   // =================================================
-                  RoomParticipantsBar(
+                  _RoomSocialBar(
                     roomId: roomId,
                     roomState: roomState,
                     currentUserId: currentUserId,
+                    compact: false,
                   ),
                 ],
               ),
@@ -184,10 +200,11 @@ class _MobileRoomLayout extends StatelessWidget {
             // =====================================================
             // PARTICIPANTS
             // =====================================================
-            RoomParticipantsBar(
+            _RoomSocialBar(
               roomId: roomId,
               roomState: roomState,
               currentUserId: currentUserId,
+              compact: true,
             ),
 
             const SizedBox(height: 6),
@@ -205,6 +222,51 @@ class _MobileRoomLayout extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+// =====================================================================
+// SOCIAL BAR
+// =====================================================================
+
+class _RoomSocialBar extends StatelessWidget {
+  const _RoomSocialBar({
+    required this.roomId,
+    required this.roomState,
+    required this.currentUserId,
+    required this.compact,
+  });
+
+  final String roomId;
+  final RoomState roomState;
+  final String? currentUserId;
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: RoomParticipantsBar(
+              roomId: roomId,
+              roomState: roomState,
+              currentUserId: currentUserId,
+            ),
+          ),
+
+          SizedBox(width: compact ? 6 : 8),
+
+          RoomReactionButton(
+            roomId: roomId,
+            currentUserId: currentUserId,
+            compact: compact,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -585,8 +647,7 @@ class _RoomWorkPanelState extends ConsumerState<_RoomWorkPanel>
       }
 
       final canHandleRequests = widget.roomState.members.any(
-        (member) =>
-            member.userId == currentUserId && member.canControlPlayback,
+        (member) => member.userId == currentUserId && member.canControlPlayback,
       );
 
       if (!canHandleRequests) {
