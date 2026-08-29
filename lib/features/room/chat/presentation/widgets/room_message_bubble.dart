@@ -1,22 +1,20 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../profile/application/profile_store.dart';
 import '../../domain/models/room_message.dart';
 import '../../domain/models/room_message_reaction.dart';
 import '../reactions/reaction_catalog.dart';
 
-class RoomMessageBubble extends StatefulWidget {
+class RoomMessageBubble extends ConsumerStatefulWidget {
   const RoomMessageBubble({
     required this.message,
-    required this.userName,
-    required this.avatarUrl,
     required this.replyUserName,
     required this.isOwn,
     required this.currentUserId,
     required this.reactions,
-    required this.reactionAvatarUrlForUser,
-    required this.reactionNameForUser,
     required this.onReply,
     required this.onToggleReaction,
     super.key,
@@ -24,8 +22,10 @@ class RoomMessageBubble extends StatefulWidget {
 
   final RoomMessage message;
 
-  final String userName;
-  final String? avatarUrl;
+  /// Временный compatibility bridge.
+  ///
+  /// Уберём после того, как RoomMessageReplyPreview
+  /// будет содержать userId автора reply.
   final String? replyUserName;
 
   final bool isOwn;
@@ -33,23 +33,19 @@ class RoomMessageBubble extends StatefulWidget {
 
   final List<RoomMessageReaction> reactions;
 
-  final String? Function(String userId) reactionAvatarUrlForUser;
-
-  final String? Function(String userId) reactionNameForUser;
-
   final VoidCallback onReply;
 
   final Future<void> Function(String reaction) onToggleReaction;
 
   @override
-  State<RoomMessageBubble> createState() => _RoomMessageBubbleState();
+  ConsumerState<RoomMessageBubble> createState() => _RoomMessageBubbleState();
 }
 
 // =====================================================================
 // MESSAGE
 // =====================================================================
 
-class _RoomMessageBubbleState extends State<RoomMessageBubble> {
+class _RoomMessageBubbleState extends ConsumerState<RoomMessageBubble> {
   final MenuController _actionsController = MenuController();
 
   // ===================================================================
@@ -78,6 +74,30 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
 
   @override
   Widget build(BuildContext context) {
+    // ===============================================================
+    // AUTHOR PROFILE
+    // ===============================================================
+    //
+    // Имя и аватар сообщения больше НЕ хранятся/берутся
+    // из RoomMessage или RoomMember.
+    //
+    // Единственный источник истины:
+    //
+    // message.userId
+    //      ↓
+    // ProfileStore
+    // ===============================================================
+
+    final profile = ref.watch(profileByIdProvider(widget.message.userId));
+
+    final profileName = profile?.displayName?.trim();
+
+    final displayName = profileName != null && profileName.isNotEmpty
+        ? profileName
+        : 'Linsy user';
+
+    final avatarUrl = profile?.avatarUrl;
+
     final colors = Theme.of(context).colorScheme;
 
     final bubbleColor = widget.isOwn
@@ -118,16 +138,6 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
           // ===========================================================
           // CONTENT-BASED MIN WIDTH
           // ===========================================================
-          //
-          // Это ключевой момент.
-          //
-          // IntrinsicWidth хорошо определяет ширину текста,
-          // но плохо понимает, какой ширины нам хотелось бы
-          // сделать Wrap с реакциями.
-          //
-          // Поэтому минимальную ширину нижней строки
-          // мы определяем сами.
-          // ===========================================================
 
           final reactionRowWidth = _preferredReactionRowWidth(summaries);
 
@@ -155,9 +165,6 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
           final maxContentWidth = math.max(0.0, maxBubbleWidth - 26);
 
           // Примерная ширина времени HH:mm.
-          //
-          // Берём чуть с запасом, чтобы layout
-          // никогда не упирался в правый край.
 
           const timeWidth = 42.0;
           const timeGap = 8.0;
@@ -175,9 +182,7 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
             child: IntrinsicWidth(
               child: MenuAnchor(
                 controller: _actionsController,
-
                 consumeOutsideTap: false,
-
                 style: MenuStyle(
                   padding: const WidgetStatePropertyAll(EdgeInsets.zero),
                   maximumSize: const WidgetStatePropertyAll(Size(340, 380)),
@@ -214,19 +219,14 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
                 builder: (context, controller, child) {
                   return GestureDetector(
                     behavior: HitTestBehavior.opaque,
-
                     onTap: _openActions,
-
                     onLongPress: _openActions,
-
                     onSecondaryTapDown: (_) {
                       _openActions();
                     },
-
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: bubbleColor,
-
                         borderRadius: BorderRadius.only(
                           topLeft: const Radius.circular(18),
                           topRight: const Radius.circular(18),
@@ -234,14 +234,11 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
                           bottomRight: Radius.circular(widget.isOwn ? 5 : 18),
                         ),
                       ),
-
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(13, 9, 13, 8),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-
                           crossAxisAlignment: CrossAxisAlignment.start,
-
                           children: [
                             // =========================================
                             // REPLY
@@ -258,7 +255,6 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
                                   minBubbleWidth - 26.0,
                                 ),
                               ),
-
                               const SizedBox(height: 8),
                             ],
 
@@ -267,7 +263,6 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
                             // =========================================
                             SelectableText(
                               widget.message.content,
-
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: textColor),
                             ),
@@ -285,18 +280,9 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
                             else
                               _ReactionTimeRow(
                                 summaries: summaries,
-
                                 maxReactionWidth: reactionAreaMaxWidth,
-
                                 dateTime: widget.message.createdAt,
-
                                 textColor: textColor,
-
-                                avatarUrlForUser:
-                                    widget.reactionAvatarUrlForUser,
-
-                                nameForUser: widget.reactionNameForUser,
-
                                 onToggleReaction: widget.onToggleReaction,
                               ),
                           ],
@@ -317,19 +303,13 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
             mainAxisAlignment: widget.isOwn
                 ? MainAxisAlignment.end
                 : MainAxisAlignment.start,
-
             crossAxisAlignment: CrossAxisAlignment.end,
-
             children: [
               // =======================================================
               // AVATAR
               // =======================================================
               if (!widget.isOwn) ...[
-                _MessageAvatar(
-                  name: widget.userName,
-                  avatarUrl: widget.avatarUrl,
-                ),
-
+                _MessageAvatar(name: displayName, avatarUrl: avatarUrl),
                 const SizedBox(width: 8),
               ],
 
@@ -339,24 +319,21 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
               Flexible(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-
                   crossAxisAlignment: widget.isOwn
                       ? CrossAxisAlignment.end
                       : CrossAxisAlignment.start,
-
                   children: [
                     if (!widget.isOwn)
                       Padding(
                         padding: const EdgeInsets.only(left: 4, bottom: 4),
                         child: Text(
-                          widget.userName,
+                          displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.labelMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
-
                     bubble,
                   ],
                 ),
@@ -402,13 +379,9 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
 
   double _estimatedReactionChipWidth(_ReactionSummary summary) {
     const reactionSize = 18.0;
-
     const padding = 12.0;
-
     const reactionAvatarGap = 4.0;
-
     const avatarSize = 17.0;
-
     const avatarOverlap = 5.0;
 
     final visibleCount = math.min(summary.userIds.length, 3);
@@ -492,23 +465,6 @@ class _RoomMessageBubbleState extends State<RoomMessageBubble> {
 // =====================================================================
 // REACTIONS + TIME
 // =====================================================================
-//
-// ВАЖНО:
-//
-// Здесь нет:
-// - Expanded
-// - Flexible
-// - Spacer
-// - Stack
-//
-// Левая область имеет чёткий maxWidth.
-//
-// Если reactions помещаются — они идут одной строкой.
-// Если нет — Wrap переносит ТОЛЬКО reactions.
-//
-// Время находится отдельным child Row и поэтому
-// всегда остаётся справа на нижней строке.
-// =====================================================================
 
 class _ReactionTimeRow extends StatelessWidget {
   const _ReactionTimeRow({
@@ -516,8 +472,6 @@ class _ReactionTimeRow extends StatelessWidget {
     required this.maxReactionWidth,
     required this.dateTime,
     required this.textColor,
-    required this.avatarUrlForUser,
-    required this.nameForUser,
     required this.onToggleReaction,
   });
 
@@ -529,22 +483,13 @@ class _ReactionTimeRow extends StatelessWidget {
 
   final Color textColor;
 
-  final String? Function(String userId) avatarUrlForUser;
-
-  final String? Function(String userId) nameForUser;
-
   final Future<void> Function(String reaction) onToggleReaction;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      // ВАЖНО:
-      // занимаем всю ширину bubble,
-      // а не только ширину reactions + time.
       mainAxisSize: MainAxisSize.max,
-
       crossAxisAlignment: CrossAxisAlignment.end,
-
       children: [
         // =============================================================
         // REACTIONS
@@ -561,8 +506,6 @@ class _ReactionTimeRow extends StatelessWidget {
                 _ReactionChip(
                   summary: summary,
                   selected: summary.selectedByMe,
-                  avatarUrlForUser: avatarUrlForUser,
-                  nameForUser: nameForUser,
                   onPressed: () async {
                     await onToggleReaction(summary.reactionId);
                   },
@@ -571,7 +514,6 @@ class _ReactionTimeRow extends StatelessWidget {
           ),
         ),
 
-        // Всё оставшееся место находится здесь.
         const Spacer(),
 
         const SizedBox(width: 8),
@@ -610,7 +552,6 @@ class _MessageTime extends StatelessWidget {
       alignment: Alignment.centerRight,
       child: Text(
         _formatTime(dateTime),
-
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: textColor.withValues(alpha: 0.55),
         ),
@@ -665,9 +606,7 @@ class _MessageActionsPanelState extends State<_MessageActionsPanel> {
                 for (final reaction in quick)
                   _QuickReactionButton(
                     reaction: reaction,
-
                     selected: _isSelected(reaction.id),
-
                     onPressed: () {
                       widget.onReaction(reaction.id);
                     },
@@ -675,11 +614,8 @@ class _MessageActionsPanelState extends State<_MessageActionsPanel> {
 
                 _MessageActionButton(
                   tooltip: 'More reactions',
-
                   icon: Icons.add_reaction_outlined,
-
                   selected: _showAll,
-
                   onPressed: () {
                     setState(() {
                       _showAll = !_showAll;
@@ -689,9 +625,7 @@ class _MessageActionsPanelState extends State<_MessageActionsPanel> {
 
                 _MessageActionButton(
                   tooltip: 'Reply',
-
                   icon: Icons.reply_rounded,
-
                   onPressed: widget.onReply,
                 ),
               ],
@@ -719,9 +653,7 @@ class _MessageActionsPanelState extends State<_MessageActionsPanel> {
                           dimension: 42,
                           child: _ReactionGridItem(
                             reaction: reaction,
-
                             selected: _isSelected(reaction.id),
-
                             onPressed: () {
                               widget.onReaction(reaction.id);
                             },
@@ -779,14 +711,10 @@ class _QuickReactionButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: Material(
           color: selected ? colors.primaryContainer : Colors.transparent,
-
           borderRadius: BorderRadius.circular(12),
-
           child: InkWell(
             onTap: onPressed,
-
             borderRadius: BorderRadius.circular(12),
-
             child: SizedBox(
               width: 40,
               height: 40,
@@ -831,14 +759,10 @@ class _MessageActionButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: Material(
           color: selected ? colors.primaryContainer : Colors.transparent,
-
           borderRadius: BorderRadius.circular(12),
-
           child: InkWell(
             onTap: onPressed,
-
             borderRadius: BorderRadius.circular(12),
-
             child: SizedBox(width: 40, height: 40, child: Icon(icon, size: 20)),
           ),
         ),
@@ -872,14 +796,10 @@ class _ReactionGridItem extends StatelessWidget {
       message: reaction.id,
       child: Material(
         color: selected ? colors.primaryContainer : Colors.transparent,
-
         borderRadius: BorderRadius.circular(10),
-
         child: InkWell(
           onTap: onPressed,
-
           borderRadius: BorderRadius.circular(10),
-
           child: Center(
             child: _ReactionVisual(reactionId: reaction.id, size: 27),
           ),
@@ -913,12 +833,10 @@ class _ReactionSummary {
 // REACTION CHIP
 // =====================================================================
 
-class _ReactionChip extends StatelessWidget {
+class _ReactionChip extends ConsumerWidget {
   const _ReactionChip({
     required this.summary,
     required this.selected,
-    required this.avatarUrlForUser,
-    required this.nameForUser,
     required this.onPressed,
   });
 
@@ -926,18 +844,20 @@ class _ReactionChip extends StatelessWidget {
 
   final bool selected;
 
-  final String? Function(String userId) avatarUrlForUser;
-
-  final String? Function(String userId) nameForUser;
-
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).colorScheme;
 
+    // Каждый пользователь реакции разрешается
+    // через единый ProfileStore.
+    //
+    // profileByIdProvider сам lazy-load'ит профиль,
+    // если его ещё нет в cache.
+
     final names = summary.userIds
-        .map((id) => nameForUser(id))
+        .map((id) => ref.watch(profileByIdProvider(id))?.displayName)
         .whereType<String>()
         .where((name) => name.trim().isNotEmpty)
         .join(', ');
@@ -945,35 +865,27 @@ class _ReactionChip extends StatelessWidget {
     return Tooltip(
       message: names.isNotEmpty
           ? names
-          : '${summary.count} reaction${summary.count == 1 ? '' : 's'}',
-
+          : '${summary.count} reaction'
+                '${summary.count == 1 ? '' : 's'}',
       child: Material(
         color: selected
             ? colors.primary.withValues(alpha: 0.12)
             : colors.surface.withValues(alpha: 0.45),
-
         borderRadius: BorderRadius.circular(14),
-
         child: InkWell(
           onTap: onPressed,
-
           borderRadius: BorderRadius.circular(14),
-
           child: Container(
             height: 27,
-
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-
               border: Border.all(
                 color: selected
                     ? colors.primary.withValues(alpha: 0.65)
                     : colors.outlineVariant.withValues(alpha: 0.45),
               ),
             ),
-
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -981,13 +893,7 @@ class _ReactionChip extends StatelessWidget {
 
                 const SizedBox(width: 4),
 
-                _ReactionUserAvatars(
-                  userIds: summary.userIds,
-
-                  avatarUrlForUser: avatarUrlForUser,
-
-                  nameForUser: nameForUser,
-                ),
+                _ReactionUserAvatars(userIds: summary.userIds),
               ],
             ),
           ),
@@ -1001,23 +907,14 @@ class _ReactionChip extends StatelessWidget {
 // REACTION AVATARS
 // =====================================================================
 
-class _ReactionUserAvatars extends StatelessWidget {
-  const _ReactionUserAvatars({
-    required this.userIds,
-    required this.avatarUrlForUser,
-    required this.nameForUser,
-  });
+class _ReactionUserAvatars extends ConsumerWidget {
+  const _ReactionUserAvatars({required this.userIds});
 
   final List<String> userIds;
 
-  final String? Function(String userId) avatarUrlForUser;
-
-  final String? Function(String userId) nameForUser;
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const avatarSize = 17.0;
-
     const overlap = 5.0;
 
     final visible = userIds.take(3).toList();
@@ -1034,23 +931,16 @@ class _ReactionUserAvatars extends StatelessWidget {
         if (visible.isNotEmpty)
           SizedBox(
             width: avatarAreaWidth,
-
             height: avatarSize,
-
             child: Stack(
               clipBehavior: Clip.none,
-
               children: [
                 for (var index = 0; index < visible.length; index++)
                   Positioned(
                     left: index * (avatarSize - overlap),
-
-                    child: _MiniReactionAvatar(
+                    child: _ProfileReactionAvatar(
+                      userId: visible[index],
                       size: avatarSize,
-
-                      avatarUrl: avatarUrlForUser(visible[index]),
-
-                      name: nameForUser(visible[index]),
                     ),
                   ),
               ],
@@ -1062,13 +952,35 @@ class _ReactionUserAvatars extends StatelessWidget {
 
           Text(
             '+$hiddenCount',
-
             style: Theme.of(
               context,
             ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ],
+    );
+  }
+}
+
+// =====================================================================
+// PROFILE REACTION AVATAR
+// =====================================================================
+
+class _ProfileReactionAvatar extends ConsumerWidget {
+  const _ProfileReactionAvatar({required this.userId, required this.size});
+
+  final String userId;
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileByIdProvider(userId));
+
+    return _MiniReactionAvatar(
+      size: size,
+      avatarUrl: profile?.avatarUrl,
+      name: profile?.displayName,
     );
   }
 }
@@ -1098,19 +1010,14 @@ class _MiniReactionAvatar extends StatelessWidget {
 
     return Tooltip(
       message: name?.trim().isNotEmpty == true ? name! : 'Linsy user',
-
       child: Container(
         width: size,
         height: size,
-
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-
           color: colors.surface,
-
           border: Border.all(color: colors.surface, width: 1.4),
         ),
-
         child: ClipOval(
           child: hasAvatar
               ? Image.network(
@@ -1118,7 +1025,6 @@ class _MiniReactionAvatar extends StatelessWidget {
                   width: size,
                   height: size,
                   fit: BoxFit.cover,
-
                   errorBuilder: (context, error, stackTrace) {
                     return _MiniAvatarFallback(name: name);
                   },
@@ -1145,18 +1051,13 @@ class _MiniAvatarFallback extends StatelessWidget {
 
     return ColoredBox(
       color: colors.secondaryContainer,
-
       child: Center(
         child: Text(
           _initial(name),
-
           style: TextStyle(
             fontSize: 8,
-
             height: 1,
-
             fontWeight: FontWeight.w700,
-
             color: colors.onSecondaryContainer,
           ),
         ),
@@ -1188,7 +1089,6 @@ class _ReactionVisual extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.contain,
-
         errorBuilder: (context, error, stackTrace) {
           return Text('❔', style: TextStyle(fontSize: size));
         },
@@ -1197,7 +1097,6 @@ class _ReactionVisual extends StatelessWidget {
 
     return Text(
       definition?.emoji ?? '❔',
-
       style: TextStyle(fontSize: size, height: 1),
     );
   }
@@ -1216,8 +1115,11 @@ class _ReplyPreview extends StatelessWidget {
   });
 
   final RoomMessageReplyPreview reply;
+
   final String userName;
+
   final Color textColor;
+
   final double minWidth;
 
   @override
@@ -1226,33 +1128,22 @@ class _ReplyPreview extends StatelessWidget {
 
     return Container(
       constraints: BoxConstraints(minWidth: minWidth),
-
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-
       decoration: BoxDecoration(
         color: colors.surface.withValues(alpha: 0.28),
-
         borderRadius: BorderRadius.circular(9),
-
         border: Border(left: BorderSide(color: colors.primary, width: 3)),
       ),
-
       child: Column(
         mainAxisSize: MainAxisSize.min,
-
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: [
           Text(
             userName,
-
             maxLines: 1,
-
             overflow: TextOverflow.ellipsis,
-
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
               color: colors.primary,
-
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1261,11 +1152,8 @@ class _ReplyPreview extends StatelessWidget {
 
           Text(
             reply.content,
-
             maxLines: 2,
-
             overflow: TextOverflow.ellipsis,
-
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: textColor.withValues(alpha: 0.72),
             ),
@@ -1293,9 +1181,7 @@ class _MessageAvatar extends StatelessWidget {
 
     return CircleAvatar(
       radius: 16,
-
       backgroundImage: hasAvatar ? NetworkImage(avatarUrl!) : null,
-
       child: hasAvatar
           ? null
           : Text(_initial(name), style: const TextStyle(fontSize: 12)),

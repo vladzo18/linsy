@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../auth/domain/models/app_user.dart';
 import '../../../../auth/presentation/controllers/auth_controller.dart';
-import '../../../presentation/controllers/room_controller.dart';
 
 import '../../domain/models/room_message.dart';
 import '../../domain/models/room_message_reaction.dart';
@@ -243,19 +242,6 @@ class _RoomChatState extends ConsumerState<RoomChat>
 
     final currentUserId = currentUser?.id;
 
-    // =================================================
-    // ROOM MEMBERS
-    // =================================================
-    //
-    // RoomController уже получает realtime изменения
-    // профилей.
-    //
-    // Пока пользователь присутствует в комнате,
-    // записываем его самый свежий AppUser в кеш.
-    // =================================================
-
-    final roomState = ref.watch(roomControllerProvider(widget.roomId));
-
     // RoomMember stores only the userId and membership metadata.
     // The actual AppUser profile is kept in the cache from the profile store
     // and the auth controller, not from the room membership list itself.
@@ -392,10 +378,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
                       // ===============================
                       // CURRENT MESSAGE PROFILE
                       // ===============================
-                      userName: messageUser?.name ?? message.userName,
-
-                      avatarUrl: messageUser?.avatarUrl ?? message.avatarUrl,
-
+                     
                       // ===============================
                       // CURRENT REPLY PROFILE
                       // ===============================
@@ -410,14 +393,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
 
                       reactions: reactionsByMessage[message.id] ?? const [],
 
-                      reactionAvatarUrlForUser: (userId) {
-                        return _profileCache[userId]?.avatarUrl;
-                      },
-
-                      reactionNameForUser: (userId) {
-                        return _profileCache[userId]?.name;
-                      },
-
+                
                       // ===============================
                       // REPLY
                       // ===============================

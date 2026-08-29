@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:developer' as developer;
 
 import '../../../core/lifecycle/app_lifecycle_provider.dart';
 import '../../../core/network/network_monitor_provider.dart';
@@ -14,11 +15,21 @@ final profileStoreProvider =
       ProfileStoreController.new,
     );
 
-final profileByIdProvider = Provider.family<UserProfile?, String>((
+final profileByIdProvider = Provider.autoDispose.family<UserProfile?, String>((
   ref,
   userId,
 ) {
-  return ref.watch(profileStoreProvider.select((profiles) => profiles[userId]));
+  final profile = ref.watch(
+    profileStoreProvider.select((profiles) => profiles[userId]),
+  );
+
+  if (profile == null && userId.isNotEmpty) {
+    final store = ref.read(profileStoreProvider.notifier);
+
+    unawaited(Future<void>.microtask(() => store.ensureProfiles([userId])));
+  }
+
+  return profile;
 });
 
 class ProfileStoreController extends Notifier<Map<String, UserProfile>> {
@@ -83,11 +94,9 @@ class ProfileStoreController extends Notifier<Map<String, UserProfile>> {
 
     _trackedIds.addAll(ids);
 
-    final missing = ids.where(
-      (id) => !state.containsKey(id) && !_loadingIds.contains(id),
-    );
-
-    final idsToLoad = missing.toList();
+    final idsToLoad = ids
+        .where((id) => !state.containsKey(id) && !_loadingIds.contains(id))
+        .toList();
 
     if (idsToLoad.isEmpty) {
       return;
@@ -99,6 +108,13 @@ class ProfileStoreController extends Notifier<Map<String, UserProfile>> {
       final profiles = await _repository.getProfiles(idsToLoad);
 
       _putProfiles(profiles);
+    } catch (error, stackTrace) {
+      developer.log(
+        'Failed to load profiles',
+        name: 'linsy.profile',
+        error: error,
+        stackTrace: stackTrace,
+      );
     } finally {
       _loadingIds.removeAll(idsToLoad);
     }
