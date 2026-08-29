@@ -180,6 +180,7 @@ class _DraggableQueue extends StatefulWidget {
   });
 
   final String roomId;
+
   final List<RoomQueueItem> items;
 
   final void Function(String itemId) onRemove;
@@ -192,146 +193,160 @@ class _DraggableQueue extends StatefulWidget {
 }
 
 class _DraggableQueueState extends State<_DraggableQueue> {
-  late List<RoomQueueItem> _items;
+  // ===================================================
+  // LOCAL DRAG SNAPSHOT
+  // ===================================================
+  //
+  // Это НЕ второй source of truth.
+  //
+  // Он существует только пока пользователь
+  // физически drag'ает item / ждёт завершения
+  // начатого этим gesture reorder.
+  //
+  // После завершения всегда возвращаемся
+  // к widget.items из QueueController.
+  // ===================================================
 
-  bool _dragging = false;
+  List<RoomQueueItem>? _dragItems;
+
   bool _saving = false;
 
-  @override
-  void initState() {
-    super.initState();
-
-    _items = List<RoomQueueItem>.from(widget.items);
+  List<RoomQueueItem> get _visibleItems {
+    return _dragItems ?? widget.items;
   }
 
-  // ===================================================================
-  // EXTERNAL UPDATE
-  // ===================================================================
-
-  @override
-  void didUpdateWidget(covariant _DraggableQueue oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (_sameQueue(oldWidget.items, widget.items)) {
-      return;
-    }
-
-    // Во время самого gesture ничего
-    // под мышкой не переставляем.
-    if (_dragging || _saving) {
-      return;
-    }
-
-    _items = List<RoomQueueItem>.from(widget.items);
-  }
-
-  // ===================================================================
+  // ===================================================
   // DRAG START
-  // ===================================================================
+  // ===================================================
 
   void _startDrag() {
-    if (_saving || _dragging) {
+    if (_saving || _dragItems != null) {
       return;
     }
 
     setState(() {
-      _dragging = true;
+      // Freeze только визуального drag snapshot.
+      //
+      // Если в этот момент на другом устройстве
+      // изменится queue, элемент под курсором
+      // не будет внезапно прыгать.
+      _dragItems = List<RoomQueueItem>.from(widget.items);
     });
   }
 
-  // ===================================================================
+  // ===================================================
   // DRAG END
-  // ===================================================================
+  // ===================================================
 
   void _endDrag() {
     if (!mounted) {
       return;
     }
 
-    setState(() {
-      _dragging = false;
-
-      if (!_saving) {
-        // Пока мы drag-али,
-        // parent мог получить новый queue snapshot.
-        _items = List<RoomQueueItem>.from(widget.items);
-      }
-    });
-  }
-
-  // ===================================================================
-  // DROP
-  // ===================================================================
-
-  Future<void> _dropOnIndex(String itemId, int targetIndex) async {
-    if (_saving || _items.length < 2) {
+    // Drop уже принят и RPC выполняется.
+    //
+    // _dropOnIndex сам очистит snapshot.
+    if (_saving) {
       return;
     }
 
-    final oldIndex = _items.indexWhere((item) => item.id == itemId);
+    setState(() {
+      _dragItems = null;
+    });
+  }
+
+  // ===================================================
+  // DROP
+  // ===================================================
+
+  Future<void> _dropOnIndex(String itemId, int targetIndex) async {
+    if (_saving) {
+      return;
+    }
+
+    final current = List<RoomQueueItem>.from(_visibleItems);
+
+    if (current.length < 2) {
+      return;
+    }
+
+    final oldIndex = current.indexWhere((item) => item.id == itemId);
 
     if (oldIndex < 0 ||
         targetIndex < 0 ||
-        targetIndex >= _items.length ||
+        targetIndex >= current.length ||
         oldIndex == targetIndex) {
       return;
     }
 
-    final previous = List<RoomQueueItem>.from(_items);
+    // =================================================
+    // VISUAL OPTIMISTIC REORDER
+    // =================================================
 
-    final reordered = List<RoomQueueItem>.from(_items);
+    final reordered = List<RoomQueueItem>.from(current);
 
     final moved = reordered.removeAt(oldIndex);
 
-    // targetIndex здесь уже является
-    // финальным индексом.
     reordered.insert(targetIndex, moved);
 
     setState(() {
-      _items = reordered;
+      _dragItems = reordered;
+
       _saving = true;
     });
 
     try {
-      final serverItems = await widget.onReorder(itemId, targetIndex);
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _items = List<RoomQueueItem>.from(serverItems);
-
-        _saving = false;
-        _dragging = false;
-      });
+      // QueueController:
+      //
+      // 1. optimistic state
+      // 2. RPC
+      // 3. authoritative SELECT
+      //
+      // Поэтому widget больше не пытается
+      // самостоятельно решить,
+      // какой snapshot "свежее".
+      await widget.onReorder(itemId, targetIndex);
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      setState(() {
-        _items = previous;
-
-        _saving = false;
-        _dragging = false;
-      });
-
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('Failed to reorder queue: $error')),
+          SnackBar(
+            content: Text(
+              'Failed to reorder queue: '
+              '$error',
+            ),
+          ),
         );
+    } finally {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _saving = false;
+
+        // Возвращаемся к единственному
+        // source of truth:
+        //
+        // QueueController → widget.items.
+        _dragItems = null;
+      });
     }
   }
 
-  // ===================================================================
+  // ===================================================
   // BUILD
-  // ===================================================================
+  // ===================================================
 
   @override
   Widget build(BuildContext context) {
-    if (_items.isEmpty) {
+    final items = _visibleItems;
+
+    if (items.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -345,12 +360,12 @@ class _DraggableQueueState extends State<_DraggableQueue> {
           key: PageStorageKey<String>('queue-${widget.roomId}'),
           padding: const EdgeInsets.only(bottom: 12),
           physics: const ClampingScrollPhysics(),
-          itemCount: _items.length,
+          itemCount: items.length,
           separatorBuilder: (context, index) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
-            final item = _items[index];
+            final item = items[index];
 
-            final canDrag = !_saving && _items.length > 1;
+            final canDrag = !_saving && items.length > 1;
 
             return _QueueDropTarget(
               key: ValueKey(item.id),
@@ -363,7 +378,6 @@ class _DraggableQueueState extends State<_DraggableQueue> {
                 number: index + 1,
                 isNext: index == 0,
                 canManage: true,
-
                 dragHandle: canDrag
                     ? _QueueDragHandle(
                         itemId: item.id,
@@ -379,7 +393,6 @@ class _DraggableQueueState extends State<_DraggableQueue> {
                         onDragEnded: _endDrag,
                       )
                     : null,
-
                 onRemove: () {
                   if (_saving) {
                     return;
@@ -395,7 +408,6 @@ class _DraggableQueueState extends State<_DraggableQueue> {
     );
   }
 }
-
 // =====================================================================
 // DROP TARGET
 // =====================================================================
@@ -906,20 +918,6 @@ class _QueueError extends StatelessWidget {
 // =====================================================================
 // HELPERS
 // =====================================================================
-
-bool _sameQueue(List<RoomQueueItem> a, List<RoomQueueItem> b) {
-  if (a.length != b.length) {
-    return false;
-  }
-
-  for (var index = 0; index < a.length; index++) {
-    if (a[index].id != b[index].id || a[index].position != b[index].position) {
-      return false;
-    }
-  }
-
-  return true;
-}
 
 String _sourceLabel(String source) {
   switch (source) {
