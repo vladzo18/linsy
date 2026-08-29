@@ -197,8 +197,6 @@ class _DraggableQueueState extends State<_DraggableQueue> {
   bool _dragging = false;
   bool _saving = false;
 
-  List<RoomQueueItem>? _pendingExternalItems;
-
   @override
   void initState() {
     super.initState();
@@ -214,23 +212,17 @@ class _DraggableQueueState extends State<_DraggableQueue> {
   void didUpdateWidget(covariant _DraggableQueue oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Родитель мог rebuild-нуться вообще без
-    // изменения Queue. Такой rebuild нам не интересен.
     if (_sameQueue(oldWidget.items, widget.items)) {
       return;
     }
 
-    final incoming = List<RoomQueueItem>.from(widget.items);
-
-    // Во время drag / RPC не даём realtime
-    // менять локальный список под курсором.
+    // Во время самого gesture ничего
+    // под мышкой не переставляем.
     if (_dragging || _saving) {
-      _pendingExternalItems = incoming;
-
       return;
     }
 
-    _items = incoming;
+    _items = List<RoomQueueItem>.from(widget.items);
   }
 
   // ===================================================================
@@ -259,18 +251,10 @@ class _DraggableQueueState extends State<_DraggableQueue> {
     setState(() {
       _dragging = false;
 
-      // Drop уже произошёл и RPC ещё идёт.
-      // Пока ничего извне не применяем.
-      if (_saving) {
-        return;
-      }
-
-      final pending = _pendingExternalItems;
-
-      if (pending != null) {
-        _items = List<RoomQueueItem>.from(pending);
-
-        _pendingExternalItems = null;
+      if (!_saving) {
+        // Пока мы drag-али,
+        // parent мог получить новый queue snapshot.
+        _items = List<RoomQueueItem>.from(widget.items);
       }
     });
   }
@@ -315,16 +299,8 @@ class _DraggableQueueState extends State<_DraggableQueue> {
         return;
       }
 
-      final pending = _pendingExternalItems;
-
       setState(() {
-        // Если realtime уже принёс более свежее
-        // состояние — используем его.
-        _items = pending != null
-            ? List<RoomQueueItem>.from(pending)
-            : List<RoomQueueItem>.from(serverItems);
-
-        _pendingExternalItems = null;
+        _items = List<RoomQueueItem>.from(serverItems);
 
         _saving = false;
         _dragging = false;
@@ -334,12 +310,8 @@ class _DraggableQueueState extends State<_DraggableQueue> {
         return;
       }
 
-      final pending = _pendingExternalItems;
-
       setState(() {
-        _items = pending != null ? List<RoomQueueItem>.from(pending) : previous;
-
-        _pendingExternalItems = null;
+        _items = previous;
 
         _saving = false;
         _dragging = false;

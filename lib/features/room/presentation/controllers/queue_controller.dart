@@ -81,24 +81,22 @@ class QueueController extends AsyncNotifier<List<RoomQueueItem>> {
     int? durationMs,
     String source = 'youtube',
   }) async {
-    await ref
-        .read(queueRepositoryProvider)
-        .addItem(
-          roomId: roomId,
-          trackId: trackId,
-          title: title,
-          thumbnailUrl: thumbnailUrl,
-          durationMs: durationMs,
-          source: source,
-        );
+    final repository = ref.read(queueRepositoryProvider);
 
-    // После собственного INSERT
-    // не полагаемся только на realtime.
-    //
-    // Provider пересоздаст подписку,
-    // а watchQueue сразу отдаст
-    // актуальное состояние из БД.
-    ref.invalidateSelf();
+    await repository.addItem(
+      roomId: roomId,
+      trackId: trackId,
+      title: title,
+      thumbnailUrl: thumbnailUrl,
+      durationMs: durationMs,
+      source: source,
+    );
+
+    // После своей mutation сразу берём
+    // authoritative snapshot.
+    final items = await repository.getQueue(roomId);
+
+    state = AsyncData(items);
   }
 
   // ===================================================================
@@ -128,13 +126,47 @@ class QueueController extends AsyncNotifier<List<RoomQueueItem>> {
   Future<List<RoomQueueItem>> reorderItem({
     required String itemId,
     required int newIndex,
-  }) {
-    // Здесь state не меняем.
-    //
-    // UI очереди самостоятельно
-    // держит optimistic порядок.
-    return ref
-        .read(queueRepositoryProvider)
-        .reorderItem(roomId: roomId, itemId: itemId, newIndex: newIndex);
+  }) async {
+    final previous = state.value ?? const <RoomQueueItem>[];
+
+    final oldIndex = previous.indexWhere((item) => item.id == itemId);
+
+    if (oldIndex < 0 ||
+        newIndex < 0 ||
+        newIndex >= previous.length ||
+        oldIndex == newIndex) {
+      return previous;
+    }
+
+    // ===================================================
+    // OPTIMISTIC
+    // ===================================================
+
+    final optimistic = List<RoomQueueItem>.from(previous);
+
+    final moved = optimistic.removeAt(oldIndex);
+
+    optimistic.insert(newIndex, moved);
+
+    state = AsyncData(optimistic);
+
+    // ===================================================
+    // SERVER
+    // ===================================================
+
+    try {
+      final serverItems = await ref
+          .read(queueRepositoryProvider)
+          .reorderItem(roomId: roomId, itemId: itemId, newIndex: newIndex);
+
+      // RPC response — authoritative.
+      state = AsyncData(serverItems);
+
+      return serverItems;
+    } catch (_) {
+      state = AsyncData(previous);
+
+      rethrow;
+    }
   }
 }

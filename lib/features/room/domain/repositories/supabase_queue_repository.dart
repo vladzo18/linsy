@@ -16,7 +16,9 @@ class SupabaseQueueRepository implements QueueRepository {
         .from('room_queue_items')
         .select()
         .eq('room_id', roomId)
-        .order('position');
+        .order('position')
+        .order('created_at')
+        .order('id');
 
     return rows
         .map((row) => _mapQueueItem(Map<String, dynamic>.from(row)))
@@ -124,60 +126,115 @@ class SupabaseQueueRepository implements QueueRepository {
 
     Timer? reloadTimer;
 
-    Future<void> loadQueue() async {
-      try {
-        final items = await getQueue(roomId);
+    var loading = false;
+    var reloadRequested = false;
+    var disposed = false;
 
-        if (!controller.isClosed) {
+    // ===================================================
+    // LOAD
+    // ===================================================
+
+    Future<void> reloadQueue() async {
+      if (disposed) {
+        return;
+      }
+
+      // Если SELECT уже идёт —
+      // просто запоминаем, что нужен ещё один.
+      if (loading) {
+        reloadRequested = true;
+        return;
+      }
+
+      loading = true;
+
+      try {
+        do {
+          reloadRequested = false;
+
+          final items = await getQueue(roomId);
+
+          if (disposed || controller.isClosed) {
+            return;
+          }
+
           controller.add(items);
-        }
+
+          // Если пока выполнялся SELECT
+          // пришло новое изменение —
+          // сразу делаем ещё один SELECT.
+        } while (reloadRequested);
       } catch (error, stackTrace) {
-        if (!controller.isClosed) {
+        if (!disposed && !controller.isClosed) {
           controller.addError(error, stackTrace);
         }
+      } finally {
+        loading = false;
       }
     }
 
+    // ===================================================
+    // DEBOUNCE
+    // ===================================================
+
     void scheduleReload() {
-      // Один reorder может создать много
-      // PostgresChanges подряд.
-      //
-      // Нам нужен только один SELECT после
-      // того, как вся пачка изменений закончилась.
       reloadTimer?.cancel();
 
       reloadTimer = Timer(const Duration(milliseconds: 120), () {
-        unawaited(loadQueue());
+        unawaited(reloadQueue());
       });
     }
 
-    () async {
-      await loadQueue();
+    // ===================================================
+    // REALTIME
+    // ===================================================
 
-      channel = _client
-          .channel(
-            'room-queue-'
-            '$roomId-'
-            '${DateTime.now().microsecondsSinceEpoch}',
-          )
-          .onPostgresChanges(
-            event: PostgresChangeEvent.all,
-            schema: 'public',
-            table: 'room_queue_items',
-            filter: PostgresChangeFilter(
-              type: PostgresChangeFilterType.eq,
-              column: 'room_id',
-              value: roomId,
-            ),
-            callback: (payload) {
-              scheduleReload();
-            },
-          )
-          .subscribe();
-    }();
+    channel = _client
+        .channel(
+          'room-queue-'
+          '$roomId-'
+          '${DateTime.now().microsecondsSinceEpoch}',
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'room_queue_items',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (_) {
+            scheduleReload();
+          },
+        )
+        .subscribe((status, error) {
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            // ВАЖНО:
+            // сначала подписались,
+            // только потом читаем snapshot.
+            unawaited(reloadQueue());
+          }
+
+          if (status == RealtimeSubscribeStatus.channelError ||
+              status == RealtimeSubscribeStatus.timedOut) {
+            if (!controller.isClosed) {
+              controller.addError(
+                error ?? StateError('Queue realtime connection failed.'),
+              );
+            }
+          }
+        });
+
+    // ===================================================
+    // DISPOSE
+    // ===================================================
 
     controller.onCancel = () async {
+      disposed = true;
+
       reloadTimer?.cancel();
+      reloadTimer = null;
 
       final currentChannel = channel;
 
