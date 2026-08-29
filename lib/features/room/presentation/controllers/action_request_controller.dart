@@ -1,19 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:linsy/features/room/application/sync/room_snapshot_sync.dart';
 import 'package:linsy/features/room/presentation/controllers/playback_controller.dart';
 import 'package:linsy/features/room/presentation/controllers/queue_controller.dart';
 
 import '../../../auth/presentation/controllers/auth_controller.dart';
+import '../../application/sync/room_consistency_coordinator_provider.dart';
 import '../../data/providers/action_request_repository_provider.dart';
 import '../../domain/models/room_action_request.dart';
 
-final actionRequestControllerProvider =
-    AsyncNotifierProvider.family<
-      ActionRequestController,
-      List<RoomActionRequest>,
-      String
-    >(ActionRequestController.new);
+final actionRequestControllerProvider = AsyncNotifierProvider.autoDispose
+    .family<ActionRequestController, List<RoomActionRequest>, String>(
+      ActionRequestController.new,
+    );
 
 class ActionRequestController extends AsyncNotifier<List<RoomActionRequest>> {
   ActionRequestController(this.roomId);
@@ -30,54 +30,58 @@ class ActionRequestController extends AsyncNotifier<List<RoomActionRequest>> {
   Future<List<RoomActionRequest>> build() async {
     final repository = ref.read(actionRequestRepositoryProvider);
 
+    final consistencyCoordinator = ref.watch(
+      roomConsistencyCoordinatorProvider(roomId),
+    );
+
+    final requestSync = RoomSnapshotSync<List<RoomActionRequest>>(
+      read: () => state.value,
+
+      load: () => repository.getRoomRequests(roomId),
+
+      write: (requests) {
+        state = AsyncData(requests);
+      },
+    );
+
+    final unregisterSync = consistencyCoordinator.register(requestSync);
+
+    final completer = Completer<List<RoomActionRequest>>();
+
     _subscription = repository
         .watchRoomRequests(roomId)
         .listen(
           (requests) {
             state = AsyncData(requests);
-          },
-          onError: (Object error, StackTrace stackTrace) {
-            state = AsyncError(error, stackTrace);
-          },
-        );
 
-    ref.onDispose(() {
-      _subscription?.cancel();
-    });
-
-    return _loadInitialRequests();
-  }
-
-  // ============================================================
-  // INITIAL LOAD
-  // ============================================================
-
-  Future<List<RoomActionRequest>> _loadInitialRequests() async {
-    final repository = ref.read(actionRequestRepositoryProvider);
-
-    final completer = Completer<List<RoomActionRequest>>();
-
-    late StreamSubscription<List<RoomActionRequest>> subscription;
-
-    subscription = repository
-        .watchRoomRequests(roomId)
-        .listen(
-          (requests) async {
             if (!completer.isCompleted) {
               completer.complete(requests);
-
-              await subscription.cancel();
             }
           },
           onError: (Object error, StackTrace stackTrace) {
+            state = AsyncError(error, stackTrace);
+
             if (!completer.isCompleted) {
               completer.completeError(error, stackTrace);
             }
           },
         );
 
+    ref.onDispose(() {
+      unregisterSync();
+
+      requestSync.dispose();
+
+      unawaited(_subscription?.cancel());
+
+      _subscription = null;
+    });
+
     return completer.future;
   }
+  // ============================================================
+  // INITIAL LOAD
+  // ============================================================
 
   // ============================================================
   // CREATE

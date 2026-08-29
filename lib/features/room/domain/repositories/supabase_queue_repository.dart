@@ -10,6 +10,19 @@ class SupabaseQueueRepository implements QueueRepository {
 
   SupabaseQueueRepository(this._client);
 
+  @override
+  Future<List<RoomQueueItem>> getQueue(String roomId) async {
+    final rows = await _client
+        .from('room_queue_items')
+        .select()
+        .eq('room_id', roomId)
+        .order('position');
+
+    return rows
+        .map((row) => _mapQueueItem(Map<String, dynamic>.from(row)))
+        .toList();
+  }
+
   // ===================================================================
   // ADD
   // ===================================================================
@@ -113,15 +126,7 @@ class SupabaseQueueRepository implements QueueRepository {
 
     Future<void> loadQueue() async {
       try {
-        final rows = await _client
-            .from('room_queue_items')
-            .select()
-            .eq('room_id', roomId)
-            .order('position');
-
-        final items = rows
-            .map((row) => _mapQueueItem(Map<String, dynamic>.from(row)))
-            .toList();
+        final items = await getQueue(roomId);
 
         if (!controller.isClosed) {
           controller.add(items);

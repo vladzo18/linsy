@@ -21,6 +21,8 @@ abstract interface class RoomRepository {
 
   Future<void> deleteRoom({required String roomId, required String userId});
 
+  Future<List<RoomMember>> getRoomMembers(String roomId);
+
   Stream<List<RoomMember>> watchRoomMembers(String roomId);
 
   Future<void> setMemberRole({

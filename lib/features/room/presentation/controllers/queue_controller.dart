@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/providers/queue_repository_provider.dart';
 import '../../domain/models/room_queue_item.dart';
+import '../../application/sync/room_consistency_coordinator_provider.dart';
+import '../../application/sync/room_snapshot_sync.dart';
 
 final queueControllerProvider = AsyncNotifierProvider.autoDispose
     .family<QueueController, List<RoomQueueItem>, String>(QueueController.new);
@@ -18,6 +20,22 @@ class QueueController extends AsyncNotifier<List<RoomQueueItem>> {
   @override
   Future<List<RoomQueueItem>> build() async {
     final repository = ref.read(queueRepositoryProvider);
+
+    final consistencyCoordinator = ref.watch(
+      roomConsistencyCoordinatorProvider(roomId),
+    );
+
+    final queueSync = RoomSnapshotSync<List<RoomQueueItem>>(
+      read: () => state.value,
+
+      load: () => repository.getQueue(roomId),
+
+      write: (items) {
+        state = AsyncData(items);
+      },
+    );
+
+    final unregisterSync = consistencyCoordinator.register(queueSync);
 
     final completer = Completer<List<RoomQueueItem>>();
 
@@ -41,9 +59,14 @@ class QueueController extends AsyncNotifier<List<RoomQueueItem>> {
         );
 
     ref.onDispose(() {
-      _subscription?.cancel();
-    });
+      unregisterSync();
 
+      queueSync.dispose();
+
+      unawaited(_subscription?.cancel());
+
+      _subscription = null;
+    });
     return completer.future;
   }
 

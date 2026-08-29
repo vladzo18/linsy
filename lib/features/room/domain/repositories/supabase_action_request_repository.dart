@@ -11,6 +11,31 @@ class SupabaseActionRequestRepository implements ActionRequestRepository {
   SupabaseActionRequestRepository(this._client);
 
   @override
+  Future<List<RoomActionRequest>> getRoomRequests(String roomId) {
+    return _getRequests(roomId);
+  }
+
+  Future<List<RoomActionRequest>> _getRequests(
+    String roomId, {
+    String? userId,
+  }) async {
+    final baseQuery = _client
+        .from('room_action_requests')
+        .select()
+        .eq('room_id', roomId);
+
+    final filteredQuery = userId != null
+        ? baseQuery.eq('user_id', userId)
+        : baseQuery;
+
+    final rows = await filteredQuery.order('created_at', ascending: true);
+
+    return rows
+        .map((row) => _mapRequest(Map<String, dynamic>.from(row)))
+        .toList();
+  }
+
+  @override
   Future<RoomActionRequest> createRequest({
     required String roomId,
     required String userId,
@@ -83,23 +108,10 @@ class SupabaseActionRequestRepository implements ActionRequestRepository {
 
     Future<void> loadRequests() async {
       try {
-        final baseQuery = _client
-            .from('room_action_requests')
-            .select()
-            .eq('room_id', roomId);
-
-        final filteredQuery = userId != null
-            ? baseQuery.eq('user_id', userId)
-            : baseQuery;
-
-        final rows = await filteredQuery.order('created_at', ascending: true);
+        final requests = await _getRequests(roomId, userId: userId);
 
         if (!controller.isClosed) {
-          controller.add(
-            rows
-                .map((row) => _mapRequest(Map<String, dynamic>.from(row)))
-                .toList(),
-          );
+          controller.add(requests);
         }
       } catch (error, stackTrace) {
         if (!controller.isClosed) {

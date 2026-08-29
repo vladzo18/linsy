@@ -1,6 +1,8 @@
 import '../models/room_action_request.dart';
 
 abstract interface class ActionRequestRepository {
+  Future<List<RoomActionRequest>> getRoomRequests(String roomId);
+
   Future<RoomActionRequest> createRequest({
     required String roomId,
     required String userId,

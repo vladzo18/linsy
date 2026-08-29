@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:linsy/features/auth/domain/models/app_user.dart';
-import 'package:linsy/features/room/data/local/recent_rooms_storage.dart';
 import 'package:linsy/features/room/data/repositories/room_repository.dart';
 import 'package:linsy/features/room/domain/models/room_member.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -169,7 +168,7 @@ class SupabaseRoomRepository implements RoomRepository {
 
     Future<void> loadMembers() async {
       try {
-        final members = await _getRoomMembers(roomId);
+        final members = await getRoomMembers(roomId);
 
         if (!controller.isClosed) {
           controller.add(members);
@@ -259,7 +258,8 @@ class SupabaseRoomRepository implements RoomRepository {
     );
   }
 
-  Future<List<RoomMember>> _getRoomMembers(String roomId) async {
+  @override
+  Future<List<RoomMember>> getRoomMembers(String roomId) async {
     final rows = await _client
         .from('room_members')
         .select()

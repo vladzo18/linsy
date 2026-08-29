@@ -8,12 +8,12 @@ import '../../../../app/session/app_session_controller.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../data/providers/room_repository_provider.dart';
 import '../../domain/models/room_member.dart';
+import '../../application/sync/room_consistency_coordinator_provider.dart';
+import '../../application/sync/room_snapshot_sync.dart';
 import 'room_state.dart';
 
-final roomControllerProvider =
-    NotifierProvider.family<RoomController, RoomState, String>(
-      RoomController.new,
-    );
+final roomControllerProvider = NotifierProvider.autoDispose
+    .family<RoomController, RoomState, String>(RoomController.new);
 
 class RoomController extends Notifier<RoomState> {
   RoomController(this.roomId);
@@ -27,6 +27,34 @@ class RoomController extends Notifier<RoomState> {
   @override
   RoomState build() {
     final repository = ref.read(roomRepositoryProvider);
+
+    final consistencyCoordinator = ref.watch(
+      roomConsistencyCoordinatorProvider(roomId),
+    );
+
+    final membersSync = RoomSnapshotSync<List<RoomMember>>(
+      read: () {
+        if (state.status != RoomStatus.ready) {
+          return null;
+        }
+
+        return state.members;
+      },
+
+      load: () => repository.getRoomMembers(roomId),
+
+      write: (members) {
+        final uniqueMembers = <String, RoomMember>{};
+
+        for (final member in members) {
+          uniqueMembers[member.user.id] = member;
+        }
+
+        state = RoomState.ready(uniqueMembers.values.toList());
+      },
+    );
+
+    final unregisterSync = consistencyCoordinator.register(membersSync);
 
     // ===============================================================
     // LOCAL PROFILE UPDATE
@@ -146,10 +174,17 @@ class RoomController extends Notifier<RoomState> {
     // ===============================================================
 
     ref.onDispose(() {
-      _membersSubscription?.cancel();
-      _profilesSubscription?.cancel();
-    });
+      unregisterSync();
 
+      membersSync.dispose();
+
+      unawaited(_membersSubscription?.cancel());
+
+      unawaited(_profilesSubscription?.cancel());
+
+      _membersSubscription = null;
+      _profilesSubscription = null;
+    });
     return const RoomState.loading();
   }
 

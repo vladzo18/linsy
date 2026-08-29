@@ -1,6 +1,8 @@
 import '../models/room_queue_item.dart';
 
 abstract interface class QueueRepository {
+  Future<List<RoomQueueItem>> getQueue(String roomId);
+
   Future<RoomQueueItem> addItem({
     required String roomId,
     required String trackId,

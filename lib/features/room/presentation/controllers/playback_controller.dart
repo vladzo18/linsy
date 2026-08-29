@@ -4,11 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/providers/playback_repository_provider.dart';
 import '../../domain/models/playback_state.dart';
+import '../../application/sync/room_consistency_coordinator_provider.dart';
+import '../../application/sync/room_snapshot_sync.dart';
 
-final playbackControllerProvider =
-    AsyncNotifierProvider.family<PlaybackController, PlaybackState, String>(
-      PlaybackController.new,
-    );
+final playbackControllerProvider = AsyncNotifierProvider.autoDispose
+    .family<PlaybackController, PlaybackState, String>(PlaybackController.new);
 
 class PlaybackController extends AsyncNotifier<PlaybackState> {
   PlaybackController(this.roomId);
@@ -25,6 +25,33 @@ class PlaybackController extends AsyncNotifier<PlaybackState> {
   Future<PlaybackState> build() async {
     final repository = ref.read(playbackRepositoryProvider);
 
+    final consistencyCoordinator = ref.watch(
+      roomConsistencyCoordinatorProvider(roomId),
+    );
+
+    final playbackSync = RoomSnapshotSync<PlaybackState>(
+      read: () => state.value,
+
+      load: () => repository.getPlaybackState(roomId),
+
+      write: (playback) {
+        state = AsyncData(playback);
+      },
+
+      // Playback регулярно проверяем,
+      // но не надо каждые 45 секунд дёргать
+      // PlaybackSynchronizer тем же snapshot.
+      shouldApply: (current, fetched) {
+        return current.updatedAt != fetched.updatedAt ||
+            current.trackId != fetched.trackId ||
+            current.isPlaying != fetched.isPlaying ||
+            current.positionMs != fetched.positionMs ||
+            current.scheduledStartAt != fetched.scheduledStartAt;
+      },
+    );
+
+    final unregisterSync = consistencyCoordinator.register(playbackSync);
+
     final initialState = await repository.getPlaybackState(roomId);
 
     _playbackSubscription = repository
@@ -39,7 +66,13 @@ class PlaybackController extends AsyncNotifier<PlaybackState> {
         );
 
     ref.onDispose(() {
-      _playbackSubscription?.cancel();
+      unregisterSync();
+
+      playbackSync.dispose();
+
+      unawaited(_playbackSubscription?.cancel());
+
+      _playbackSubscription = null;
     });
 
     return initialState;
