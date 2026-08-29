@@ -1,8 +1,4 @@
-enum JoinRoomStatus {
-  idle,
-  loading,
-  error,
-}
+enum JoinRoomStatus { idle, loading, error }
 
 class JoinRoomState {
   final String roomId;
@@ -16,8 +12,7 @@ class JoinRoomState {
   });
 
   bool get canJoin =>
-      roomId.trim().isNotEmpty &&
-      status != JoinRoomStatus.loading;
+      roomId.trim().isNotEmpty && status != JoinRoomStatus.loading;
 
   JoinRoomState copyWith({
     String? roomId,

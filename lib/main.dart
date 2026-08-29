@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linsy/core/deep_links/app_links_provider.dart';
 import 'package:linsy/core/platform/windows/window_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:linsy/core/network/network_monitor_provider.dart';
 import 'app/app.dart';
 import 'app/app_exit_service.dart';
-
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +17,14 @@ Future<void> main() async {
   );
 
   final container = ProviderContainer();
+
+  // ===================================================================
+  // NETWORK
+  // ===================================================================
+
+  await container.read(networkMonitorProvider).start();
+
+  await container.read(networkRecoveryCoordinatorProvider).start();
 
   // ===================================================================
   // APP EXIT

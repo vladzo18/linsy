@@ -8,9 +8,7 @@ class CreateRoomPage extends ConsumerWidget {
   const CreateRoomPage({super.key});
 
   Future<void> _createRoom(WidgetRef ref) async {
-    await ref
-        .read(createRoomControllerProvider.notifier)
-        .createRoom();
+    await ref.read(createRoomControllerProvider.notifier).createRoom();
   }
 
   @override
@@ -18,14 +16,10 @@ class CreateRoomPage extends ConsumerWidget {
     final state = ref.watch(createRoomControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create a room'),
-      ),
+      appBar: AppBar(title: const Text('Create a room')),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: 500,
-          ),
+          constraints: const BoxConstraints(maxWidth: 500),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -34,9 +28,7 @@ class CreateRoomPage extends ConsumerWidget {
                 TextField(
                   onChanged: (value) {
                     ref
-                        .read(
-                          createRoomControllerProvider.notifier,
-                        )
+                        .read(createRoomControllerProvider.notifier)
                         .setName(value);
                   },
                   textInputAction: TextInputAction.done,
@@ -54,9 +46,7 @@ class CreateRoomPage extends ConsumerWidget {
                     child: Text(
                       state.errorMessage!,
                       style: TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .error,
+                        color: Theme.of(context).colorScheme.error,
                       ),
                     ),
                   ),
@@ -66,18 +56,12 @@ class CreateRoomPage extends ConsumerWidget {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: state.canCreate
-                        ? () => _createRoom(ref)
-                        : null,
-                    child: state.status ==
-                            CreateRoomStatus.loading
+                    onPressed: state.canCreate ? () => _createRoom(ref) : null,
+                    child: state.status == CreateRoomStatus.loading
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('Create'),
                   ),

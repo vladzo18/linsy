@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../application/sync/room_consistency_coordinator_provider.dart';
+import '../../application/sync/room_reaction_sync.dart';
 import '../../data/providers/room_reaction_repository_provider.dart';
 import '../../domain/models/room_message_reaction.dart';
 
@@ -21,6 +23,21 @@ class RoomReactionController extends AsyncNotifier<List<RoomMessageReaction>> {
   Future<List<RoomMessageReaction>> build() async {
     final repository = ref.read(roomReactionRepositoryProvider);
 
+    final consistencyCoordinator = ref.watch(
+      roomConsistencyCoordinatorProvider(roomId),
+    );
+
+    final reactionSync = RoomReactionSync(
+      roomId: roomId,
+      repository: repository,
+      readReactions: () => state.value,
+      writeReactions: (reactions) {
+        state = AsyncData(reactions);
+      },
+    );
+
+    final unregisterSync = consistencyCoordinator.register(reactionSync);
+
     final completer = Completer<List<RoomMessageReaction>>();
 
     _subscription = repository
@@ -37,6 +54,7 @@ class RoomReactionController extends AsyncNotifier<List<RoomMessageReaction>> {
           onError: (Object error, StackTrace stackTrace) {
             if (!completer.isCompleted) {
               completer.completeError(error, stackTrace);
+
               return;
             }
 
@@ -45,7 +63,13 @@ class RoomReactionController extends AsyncNotifier<List<RoomMessageReaction>> {
         );
 
     ref.onDispose(() {
-      _subscription?.cancel();
+      unregisterSync();
+
+      reactionSync.dispose();
+
+      unawaited(_subscription?.cancel());
+
+      _subscription = null;
     });
 
     return completer.future;

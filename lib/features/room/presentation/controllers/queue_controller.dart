@@ -6,59 +6,39 @@ import '../../data/providers/queue_repository_provider.dart';
 import '../../domain/models/room_queue_item.dart';
 
 final queueControllerProvider = AsyncNotifierProvider.autoDispose
-    .family<QueueController, List<RoomQueueItem>, String>(
-  QueueController.new,
-);
+    .family<QueueController, List<RoomQueueItem>, String>(QueueController.new);
 
-class QueueController
-    extends AsyncNotifier<List<RoomQueueItem>> {
+class QueueController extends AsyncNotifier<List<RoomQueueItem>> {
   QueueController(this.roomId);
 
   final String roomId;
 
-  StreamSubscription<List<RoomQueueItem>>?
-      _subscription;
+  StreamSubscription<List<RoomQueueItem>>? _subscription;
 
   @override
   Future<List<RoomQueueItem>> build() async {
-    final repository =
-        ref.read(
-      queueRepositoryProvider,
-    );
+    final repository = ref.read(queueRepositoryProvider);
 
-    final completer =
-        Completer<List<RoomQueueItem>>();
+    final completer = Completer<List<RoomQueueItem>>();
 
     _subscription = repository
-        .watchQueue(
-          roomId,
-        )
+        .watchQueue(roomId)
         .listen(
-      (items) {
-        state =
-            AsyncData(items);
+          (items) {
+            state = AsyncData(items);
 
-        if (!completer.isCompleted) {
-          completer.complete(items);
-        }
-      },
-      onError: (
-        Object error,
-        StackTrace stackTrace,
-      ) {
-        state = AsyncError(
-          error,
-          stackTrace,
+            if (!completer.isCompleted) {
+              completer.complete(items);
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            state = AsyncError(error, stackTrace);
+
+            if (!completer.isCompleted) {
+              completer.completeError(error, stackTrace);
+            }
+          },
         );
-
-        if (!completer.isCompleted) {
-          completer.completeError(
-            error,
-            stackTrace,
-          );
-        }
-      },
-    );
 
     ref.onDispose(() {
       _subscription?.cancel();
@@ -79,17 +59,13 @@ class QueueController
     String source = 'youtube',
   }) async {
     await ref
-        .read(
-          queueRepositoryProvider,
-        )
+        .read(queueRepositoryProvider)
         .addItem(
           roomId: roomId,
           trackId: trackId,
           title: title,
-          thumbnailUrl:
-              thumbnailUrl,
-          durationMs:
-              durationMs,
+          thumbnailUrl: thumbnailUrl,
+          durationMs: durationMs,
           source: source,
         );
 
@@ -106,33 +82,17 @@ class QueueController
   // REMOVE
   // ===================================================================
 
-  Future<void> removeItem(
-    String itemId,
-  ) async {
-    final previousItems =
-        state.value ??
-            const <RoomQueueItem>[];
+  Future<void> removeItem(String itemId) async {
+    final previousItems = state.value ?? const <RoomQueueItem>[];
 
     state = AsyncData(
-      previousItems
-          .where(
-            (item) =>
-                item.id != itemId,
-          )
-          .toList(),
+      previousItems.where((item) => item.id != itemId).toList(),
     );
 
     try {
-      await ref
-          .read(
-            queueRepositoryProvider,
-          )
-          .removeItem(
-            itemId: itemId,
-          );
+      await ref.read(queueRepositoryProvider).removeItem(itemId: itemId);
     } catch (error) {
-      state =
-          AsyncData(previousItems);
+      state = AsyncData(previousItems);
 
       rethrow;
     }
@@ -142,8 +102,7 @@ class QueueController
   // REORDER
   // ===================================================================
 
-  Future<List<RoomQueueItem>>
-      reorderItem({
+  Future<List<RoomQueueItem>> reorderItem({
     required String itemId,
     required int newIndex,
   }) {
@@ -152,13 +111,7 @@ class QueueController
     // UI очереди самостоятельно
     // держит optimistic порядок.
     return ref
-        .read(
-          queueRepositoryProvider,
-        )
-        .reorderItem(
-          roomId: roomId,
-          itemId: itemId,
-          newIndex: newIndex,
-        );
+        .read(queueRepositoryProvider)
+        .reorderItem(roomId: roomId, itemId: itemId, newIndex: newIndex);
   }
 }

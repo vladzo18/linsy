@@ -38,7 +38,6 @@ class RoomMessage {
   final RoomMessageReplyPreview? reply;
 
   bool isOwn(String? currentUserId) {
-    return currentUserId != null &&
-        userId == currentUserId;
+    return currentUserId != null && userId == currentUserId;
   }
 }

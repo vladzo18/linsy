@@ -15,19 +15,14 @@ class TrackSearchResult {
     required this.durationMs,
   });
 
-  factory TrackSearchResult.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory TrackSearchResult.fromJson(Map<String, dynamic> json) {
     return TrackSearchResult(
       source: json['source'] as String,
       trackId: json['trackId'] as String,
       title: json['title'] as String,
-      channelTitle:
-          json['channelTitle'] as String,
-      thumbnailUrl:
-          json['thumbnailUrl'] as String?,
-      durationMs:
-          (json['durationMs'] as num?)?.toInt(),
+      channelTitle: json['channelTitle'] as String,
+      thumbnailUrl: json['thumbnailUrl'] as String?,
+      durationMs: (json['durationMs'] as num?)?.toInt(),
     );
   }
 }

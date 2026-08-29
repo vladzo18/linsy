@@ -1,9 +1,4 @@
-enum CreateRoomStatus {
-  idle,
-  loading,
-  success,
-  error,
-}
+enum CreateRoomStatus { idle, loading, success, error }
 
 class CreateRoomState {
   final String name;
@@ -16,9 +11,7 @@ class CreateRoomState {
     this.errorMessage,
   });
 
-  bool get canCreate => 
-    name.isNotEmpty && 
-    status != CreateRoomStatus.loading;
+  bool get canCreate => name.isNotEmpty && status != CreateRoomStatus.loading;
 
   CreateRoomState copyWith({
     String? name,
@@ -29,9 +22,9 @@ class CreateRoomState {
     return CreateRoomState(
       name: name ?? this.name,
       status: status ?? this.status,
-      errorMessage: clearErrorMessage 
-        ? null 
-        : errorMessage ?? this.errorMessage,
+      errorMessage: clearErrorMessage
+          ? null
+          : errorMessage ?? this.errorMessage,
     );
   }
 }

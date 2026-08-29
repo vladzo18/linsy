@@ -45,7 +45,6 @@ class MockPlayerEngine implements PlayerEngine {
 
   DateTime? _startedAt;
 
-
   @override
   Future<void> setVolume(double volume) async {}
 

@@ -60,11 +60,10 @@ class CreateRoomController extends Notifier<CreateRoomState> {
     );
 
     try {
-
       final room = await ref
           .read(roomMembershipServiceProvider)
           .createRoom(name: name, hostId: user.id);
-          
+
       ref.read(appSessionControllerProvider.notifier).enterRoom(room.id);
 
       state = state.copyWith(status: CreateRoomStatus.idle);

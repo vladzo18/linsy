@@ -8,9 +8,7 @@ class JoinRoomPage extends ConsumerWidget {
   const JoinRoomPage({super.key});
 
   Future<void> _joinRoom(WidgetRef ref) async {
-    await ref
-        .read(joinRoomControllerProvider.notifier)
-        .joinRoom();
+    await ref.read(joinRoomControllerProvider.notifier).joinRoom();
   }
 
   @override
@@ -18,14 +16,10 @@ class JoinRoomPage extends ConsumerWidget {
     final state = ref.watch(joinRoomControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Join a room'),
-      ),
+      appBar: AppBar(title: const Text('Join a room')),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: 500,
-          ),
+          constraints: const BoxConstraints(maxWidth: 500),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -34,15 +28,11 @@ class JoinRoomPage extends ConsumerWidget {
                 TextField(
                   onChanged: (value) {
                     ref
-                        .read(
-                          joinRoomControllerProvider.notifier,
-                        )
+                        .read(joinRoomControllerProvider.notifier)
                         .setRoomId(value);
                   },
-                  textCapitalization:
-                      TextCapitalization.characters,
-                  textInputAction:
-                      TextInputAction.done,
+                  textCapitalization: TextCapitalization.characters,
+                  textInputAction: TextInputAction.done,
                   decoration: const InputDecoration(
                     labelText: 'Room code',
                     hintText: 'K7P4XZ',
@@ -58,9 +48,7 @@ class JoinRoomPage extends ConsumerWidget {
                     child: Text(
                       state.errorMessage!,
                       style: TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .error,
+                        color: Theme.of(context).colorScheme.error,
                       ),
                     ),
                   ),
@@ -70,18 +58,12 @@ class JoinRoomPage extends ConsumerWidget {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: state.canJoin
-                        ? () => _joinRoom(ref)
-                        : null,
-                    child: state.status ==
-                            JoinRoomStatus.loading
+                    onPressed: state.canJoin ? () => _joinRoom(ref) : null,
+                    child: state.status == JoinRoomStatus.loading
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('Join'),
                   ),

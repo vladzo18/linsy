@@ -6,29 +6,18 @@ import 'player_engine.dart';
 import 'windows_youtube_player_engine.dart';
 import 'youtube_player_engine.dart';
 
-final playerEngineProvider =
-    Provider.autoDispose<PlayerEngine>(
-  (ref) {
-    late final PlayerEngine engine;
+final playerEngineProvider = Provider.autoDispose<PlayerEngine>((ref) {
+  late final PlayerEngine engine;
 
-    if (Platform.isWindows) {
-      engine =
-          WindowsYoutubePlayerEngine();
-    } else if (
-      Platform.isAndroid ||
-      Platform.isIOS
-    ) {
-      engine =
-          YoutubePlayerEngine();
-    } else {
-      engine =
-          MockPlayerEngine();
-    }
+  if (Platform.isWindows) {
+    engine = WindowsYoutubePlayerEngine();
+  } else if (Platform.isAndroid || Platform.isIOS) {
+    engine = YoutubePlayerEngine();
+  } else {
+    engine = MockPlayerEngine();
+  }
 
-    ref.onDispose(
-      engine.dispose,
-    );
+  ref.onDispose(engine.dispose);
 
-    return engine;
-  },
-);
+  return engine;
+});

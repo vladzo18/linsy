@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/settings/appearance_settings.dart';
 import 'app_exit_service.dart';
 import 'router.dart';
+import '../core/lifecycle/app_lifecycle_provider.dart';
 import 'theme/app_theme_resolver.dart';
 
 class LinsyApp extends ConsumerStatefulWidget {
@@ -24,7 +25,14 @@ class _LinsyAppState extends ConsumerState<LinsyApp> {
   void initState() {
     super.initState();
 
+    final lifecycleService = ref.read(appLifecycleServiceProvider);
+
     _lifecycleListener = AppLifecycleListener(
+      // ===============================================================
+      // APP LIFECYCLE
+      // ===============================================================
+      onStateChange: lifecycleService.handleStateChanged,
+
       // ===============================================================
       // DESKTOP EXIT REQUEST
       // ===============================================================

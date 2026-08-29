@@ -17,9 +17,7 @@ enum RoomMemberRole {
         return RoomMemberRole.member;
 
       default:
-        throw ArgumentError(
-          'Unknown room member role: $value',
-        );
+        throw ArgumentError('Unknown room member role: $value');
     }
   }
 }
@@ -35,12 +33,9 @@ class RoomMember {
     required this.joinedAt,
   });
 
-  bool get isHost =>
-      role == RoomMemberRole.host;
+  bool get isHost => role == RoomMemberRole.host;
 
-  bool get isModerator =>
-      role == RoomMemberRole.moderator;
+  bool get isModerator => role == RoomMemberRole.moderator;
 
-  bool get canControlPlayback =>
-      isHost || isModerator;
+  bool get canControlPlayback => isHost || isModerator;
 }

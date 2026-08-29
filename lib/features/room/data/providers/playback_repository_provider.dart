@@ -3,9 +3,6 @@ import 'package:linsy/features/room/domain/repositories/supabase_playback_reposi
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/repositories/playback_repository.dart';
 
-final playbackRepositoryProvider =
-    Provider<PlaybackRepository>((ref) {
-  return SupabasePlaybackRepository(
-    Supabase.instance.client,
-  );
+final playbackRepositoryProvider = Provider<PlaybackRepository>((ref) {
+  return SupabasePlaybackRepository(Supabase.instance.client);
 });

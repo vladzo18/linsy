@@ -5,23 +5,18 @@ import '../../domain/models/track_search_result.dart';
 
 final trackSearchControllerProvider =
     NotifierProvider<
-        TrackSearchController,
-        AsyncValue<List<TrackSearchResult>>>(
-  TrackSearchController.new,
-);
+      TrackSearchController,
+      AsyncValue<List<TrackSearchResult>>
+    >(TrackSearchController.new);
 
 class TrackSearchController
-    extends Notifier<
-        AsyncValue<List<TrackSearchResult>>> {
+    extends Notifier<AsyncValue<List<TrackSearchResult>>> {
   @override
-  AsyncValue<List<TrackSearchResult>>
-      build() {
+  AsyncValue<List<TrackSearchResult>> build() {
     return const AsyncData([]);
   }
 
-  Future<void> search(
-    String query,
-  ) async {
+  Future<void> search(String query) async {
     final cleanQuery = query.trim();
 
     if (cleanQuery.length < 2) {
@@ -33,17 +28,12 @@ class TrackSearchController
 
     try {
       final results = await ref
-          .read(
-            trackSearchRepositoryProvider,
-          )
+          .read(trackSearchRepositoryProvider)
           .search(cleanQuery);
 
       state = AsyncData(results);
     } catch (error, stackTrace) {
-      state = AsyncError(
-        error,
-        stackTrace,
-      );
+      state = AsyncError(error, stackTrace);
     }
   }
 

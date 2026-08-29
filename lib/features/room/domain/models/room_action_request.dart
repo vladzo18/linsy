@@ -33,9 +33,7 @@ enum RoomAction {
       case 'add_track':
         return RoomAction.addTrack;
       default:
-        throw ArgumentError(
-          'Unknown room action: $value',
-        );
+        throw ArgumentError('Unknown room action: $value');
     }
   }
 }
@@ -46,9 +44,7 @@ enum RoomActionRequestStatus {
   rejected,
   cancelled;
 
-  static RoomActionRequestStatus fromString(
-    String value,
-  ) {
+  static RoomActionRequestStatus fromString(String value) {
     switch (value) {
       case 'pending':
         return RoomActionRequestStatus.pending;
@@ -59,9 +55,7 @@ enum RoomActionRequestStatus {
       case 'cancelled':
         return RoomActionRequestStatus.cancelled;
       default:
-        throw ArgumentError(
-          'Unknown request status: $value',
-        );
+        throw ArgumentError('Unknown request status: $value');
     }
   }
 }

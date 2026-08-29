@@ -1,11 +1,6 @@
 import '../../domain/models/room_member.dart';
 
-enum RoomStatus {
-  loading,
-  ready,
-  leaving,
-  error,
-}
+enum RoomStatus { loading, ready, leaving, error }
 
 class RoomState {
   final RoomStatus status;
@@ -19,23 +14,20 @@ class RoomState {
   });
 
   const RoomState.loading()
-      : status = RoomStatus.loading,
-        members = const [],
-        errorMessage = null;
-
-  const RoomState.ready(
-    this.members,
-  ) : status = RoomStatus.ready,
+    : status = RoomStatus.loading,
+      members = const [],
       errorMessage = null;
 
-  const RoomState.leaving(
-    this.members,
-  ) : status = RoomStatus.leaving,
+  const RoomState.ready(this.members)
+    : status = RoomStatus.ready,
       errorMessage = null;
 
-  const RoomState.error(
-    String message,
-  ) : status = RoomStatus.error,
+  const RoomState.leaving(this.members)
+    : status = RoomStatus.leaving,
+      errorMessage = null;
+
+  const RoomState.error(String message)
+    : status = RoomStatus.error,
       members = const [],
       errorMessage = message;
 }

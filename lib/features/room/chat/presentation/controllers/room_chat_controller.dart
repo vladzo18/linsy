@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../auth/presentation/controllers/auth_controller.dart';
+import '../../../application/sync/room_consistency_coordinator_provider.dart';
+import '../../application/sync/room_chat_sync.dart';
 import '../../data/providers/room_chat_repository_provider.dart';
 import '../../domain/models/room_message.dart';
 
@@ -21,26 +23,46 @@ class RoomChatController extends AsyncNotifier<List<RoomMessage>> {
   bool _loadingOlder = false;
   bool _hasMore = true;
 
+  // ===================================================
+  // BUILD
+  // ===================================================
+
   @override
   Future<List<RoomMessage>> build() async {
     final repository = ref.read(roomChatRepositoryProvider);
 
+    final consistencyCoordinator = ref.watch(
+      roomConsistencyCoordinatorProvider(roomId),
+    );
+
+    final chatSync = RoomChatSync(
+      roomId: roomId,
+      repository: repository,
+      readMessages: () => state.value,
+      writeMessages: (messages) {
+        state = AsyncData(messages);
+      },
+    );
+
+    final unregisterSync = consistencyCoordinator.register(chatSync);
+
     final completer = Completer<List<RoomMessage>>();
+
+    // ===================================================
+    // REALTIME
+    // ===================================================
 
     _subscription = repository
         .watchMessages(roomId)
         .listen(
           (messages) {
-            // Первый список.
             if (!completer.isCompleted) {
               completer.complete(messages);
-
               return;
             }
 
             _mergeLiveMessages(messages);
           },
-
           onError: (Object error, StackTrace stackTrace) {
             if (!completer.isCompleted) {
               completer.completeError(error, stackTrace);
@@ -52,8 +74,18 @@ class RoomChatController extends AsyncNotifier<List<RoomMessage>> {
           },
         );
 
+    // ===================================================
+    // DISPOSE
+    // ===================================================
+
     ref.onDispose(() {
-      _subscription?.cancel();
+      unregisterSync();
+
+      chatSync.dispose();
+
+      unawaited(_subscription?.cancel());
+
+      _subscription = null;
     });
 
     return completer.future;
@@ -64,17 +96,15 @@ class RoomChatController extends AsyncNotifier<List<RoomMessage>> {
   // ===================================================
 
   void _mergeLiveMessages(List<RoomMessage> liveMessages) {
-    final current = state.value ?? const [];
+    final current = state.value ?? const <RoomMessage>[];
 
     final byId = <String, RoomMessage>{};
 
-    // Сначала сохраняем старую историю,
-    // которую могли получить pagination.
+    // Сохраняем pagination history.
     for (final message in current) {
       byId[message.id] = message;
     }
 
-    // Потом обновляем realtime сообщения.
     for (final message in liveMessages) {
       byId[message.id] = message;
     }

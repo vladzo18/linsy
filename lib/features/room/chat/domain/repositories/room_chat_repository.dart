@@ -7,9 +7,7 @@ abstract interface class RoomChatRepository {
     DateTime? before,
   });
 
-  Stream<List<RoomMessage>> watchMessages(
-    String roomId,
-  );
+  Stream<List<RoomMessage>> watchMessages(String roomId);
 
   Future<void> sendMessage({
     required String roomId,

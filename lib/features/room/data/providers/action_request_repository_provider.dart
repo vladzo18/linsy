@@ -3,10 +3,8 @@ import 'package:linsy/features/room/domain/repositories/supabase_action_request_
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/repositories/action_request_repository.dart';
 
-
-final actionRequestRepositoryProvider =
-    Provider<ActionRequestRepository>((ref) {
-  return SupabaseActionRequestRepository(
-    Supabase.instance.client,
-  );
+final actionRequestRepositoryProvider = Provider<ActionRequestRepository>((
+  ref,
+) {
+  return SupabaseActionRequestRepository(Supabase.instance.client);
 });

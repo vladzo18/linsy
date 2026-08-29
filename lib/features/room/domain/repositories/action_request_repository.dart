@@ -8,21 +8,14 @@ abstract interface class ActionRequestRepository {
     Map<String, dynamic>? payload,
   });
 
-  Future<void> cancelRequest({
-    required String requestId,
-  });
+  Future<void> cancelRequest({required String requestId});
 
   Future<void> resolveRequest({
     required String requestId,
     required RoomActionRequestStatus status,
   });
 
-  Stream<List<RoomActionRequest>> watchRoomRequests(
-    String roomId,
-  );
+  Stream<List<RoomActionRequest>> watchRoomRequests(String roomId);
 
-  Stream<List<RoomActionRequest>> watchMyRequests(
-    String roomId,
-    String userId,
-  );
+  Stream<List<RoomActionRequest>> watchMyRequests(String roomId, String userId);
 }
