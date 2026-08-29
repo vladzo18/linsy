@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../controllers/create_room_controller.dart';
 import '../controllers/create_room_state.dart';
@@ -8,19 +7,10 @@ import '../controllers/create_room_state.dart';
 class CreateRoomPage extends ConsumerWidget {
   const CreateRoomPage({super.key});
 
-  Future<void> _createRoom(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final room = await ref
+  Future<void> _createRoom(WidgetRef ref) async {
+    await ref
         .read(createRoomControllerProvider.notifier)
         .createRoom();
-
-    if (!context.mounted || room == null) {
-      return;
-    }
-
-    context.push('/room/${room.id}');
   }
 
   @override
@@ -44,7 +34,9 @@ class CreateRoomPage extends ConsumerWidget {
                 TextField(
                   onChanged: (value) {
                     ref
-                        .read(createRoomControllerProvider.notifier)
+                        .read(
+                          createRoomControllerProvider.notifier,
+                        )
                         .setName(value);
                   },
                   textInputAction: TextInputAction.done,
@@ -62,7 +54,9 @@ class CreateRoomPage extends ConsumerWidget {
                     child: Text(
                       state.errorMessage!,
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .error,
                       ),
                     ),
                   ),
@@ -73,13 +67,15 @@ class CreateRoomPage extends ConsumerWidget {
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: state.canCreate
-                        ? () => _createRoom(context, ref)
+                        ? () => _createRoom(ref)
                         : null,
-                    child: state.status == CreateRoomStatus.loading
+                    child: state.status ==
+                            CreateRoomStatus.loading
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(
+                            child:
+                                CircularProgressIndicator(
                               strokeWidth: 2,
                             ),
                           )

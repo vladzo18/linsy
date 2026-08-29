@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    html,
+    body,
+    #player {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="player"></div>
+
+  <script>
+    let player = null;
+    let playerReady = false;
+
+    let currentTrackId = null;
+    let wantPlaying = false;
+    let volume = 100;
+
+    const commandQueue = [];
+
+    function send(message) {
+      if (
+        window.chrome &&
+        window.chrome.webview
+      ) {
+        window.chrome.webview.postMessage(
+          message
+        );
+      }
+    }
+
+    function normalizeMessage(data) {
+      if (typeof data === 'string') {
+        try {
+          return JSON.parse(data);
+        } catch (_) {
+          return null;
+        }
+      }
+
+      return data;
+    }
+
+    window.chrome.webview.addEventListener(
+      'message',
+      event => {
+        const message =
+          normalizeMessage(event.data);
+
+        if (!message) {
+          return;
+        }
+
+        if (!playerReady) {
+          commandQueue.push(message);
+          return;
+        }
+
+        handleCommand(message);
+      }
+    );
+
+    const tag =
+      document.createElement('script');
+
+    tag.src =
+      'https://www.youtube.com/iframe_api';
+
+    document.head.appendChild(tag);
+
+
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player(
+        'player',
+        {
+          width: '100%',
+          height: '100%',
+
+          playerVars: {
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            rel: 0,
+
+            playsinline: 1,
+            enablejsapi: 1,
+
+            origin:
+              'https://linsy.local',
+
+            widget_referrer:
+              'https://linsy.local/'
+          },
+
+          events: {
+            onReady:
+              onPlayerReady,
+
+            onStateChange:
+              onPlayerStateChange,
+
+            onError:
+              onPlayerError
+          }
+        }
+      );
+    }
+
+
+    function onPlayerReady() {
+      playerReady = true;
+
+      player.setVolume(volume);
+      player.mute();
+
+      send({
+        type: 'ready'
+      });
+
+      while (commandQueue.length > 0) {
+        handleCommand(
+          commandQueue.shift()
+        );
+      }
+    }
+
+
+    function onPlayerStateChange(event) {
+      let state = 'unknown';
+
+      switch (event.data) {
+        case YT.PlayerState.UNSTARTED:
+          state = 'unstarted';
+          break;
+
+        case YT.PlayerState.ENDED:
+          state = 'ended';
+          break;
+
+        case YT.PlayerState.PLAYING:
+          state = 'playing';
+          break;
+
+        case YT.PlayerState.PAUSED:
+          state = 'paused';
+          break;
+
+        case YT.PlayerState.BUFFERING:
+          state = 'buffering';
+          break;
+
+        case YT.PlayerState.CUED:
+          state = 'cued';
+          break;
+      }
+
+      send({
+        type: 'state',
+        state: state,
+        trackId: currentTrackId
+      });
+
+
+      // ============================================
+      // PLAYING
+      // ============================================
+
+      if (
+        event.data ===
+        YT.PlayerState.PLAYING
+      ) {
+        // Если настоящий PLAY ещё не разрешён,
+        // значит это muted preload.
+        if (!wantPlaying) {
+          player.pauseVideo();
+
+          send({
+            type: 'preloaded',
+            trackId: currentTrackId
+          });
+
+          return;
+        }
+
+        // Настоящее воспроизведение.
+        player.setVolume(volume);
+
+        if (volume <= 0) {
+          player.mute();
+        } else {
+          player.unMute();
+        }
+
+        return;
+      }
+    }
+
+    function onPlayerError(event) {
+      send({
+        type: 'error',
+        code: event.data,
+        trackId: currentTrackId
+      });
+    }
+
+
+    function handleCommand(message) {
+      switch (message.command) {
+        case 'load':
+          currentTrackId =
+            message.trackId;
+
+          wantPlaying = false;
+
+          player.mute();
+
+          player.loadVideoById({
+            videoId:
+              message.trackId,
+
+            startSeconds:
+              (message.positionMs || 0)
+              / 1000.0
+          });
+
+          break;
+
+
+        case 'play':
+          wantPlaying = true;
+
+          // Keep it muted first so WebView2 autoplay
+          // policy cannot block the playback start.
+          player.mute();
+
+          player.playVideo();
+
+          send({
+            type: 'debug',
+            message: 'playVideo called'
+          });
+
+          break;
+
+
+        case 'setVolume':
+          volume = Math.max(
+            0,
+            Math.min(
+              100,
+              Number(message.volume) || 0
+            )
+          );
+
+          player.setVolume(volume);
+
+          if (volume <= 0) {
+            player.mute();
+          } else if (wantPlaying) {
+            player.unMute();
+          }
+
+          break;
+
+        case 'pause':
+          wantPlaying = false;
+
+          player.pauseVideo();
+
+          break;
+
+
+        case 'seek':
+          player.seekTo(
+            (message.positionMs || 0)
+            / 1000.0,
+            true
+          );
+
+          break;
+
+
+        case 'stop':
+          wantPlaying = false;
+
+          player.stopVideo();
+
+          currentTrackId = null;
+
+          break;
+
+
+        case 'mute':
+          player.mute();
+          break;
+
+
+        case 'unmute':
+          player.unMute();
+          player.setVolume(100);
+          break;
+      }
+    }
+
+
+    // Позиция плеера.
+    //
+    // Такой же интервал примерно используем
+    // на Android.
+    setInterval(
+      () => {
+        if (
+          !playerReady ||
+          !player ||
+          !currentTrackId
+        ) {
+          return;
+        }
+
+        const position =
+          player.getCurrentTime();
+
+        if (
+          typeof position !== 'number' ||
+          !Number.isFinite(position)
+        ) {
+          return;
+        }
+
+        send({
+          type: 'position',
+          trackId: currentTrackId,
+          positionMs:
+            Math.round(
+              position * 1000
+            )
+        });
+      },
+      250
+    );
+  </script>
+</body>
+
+</html>

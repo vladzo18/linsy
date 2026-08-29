@@ -15,12 +15,12 @@ class JoinRoomState {
     this.errorMessage,
   });
 
-  bool get canJoin => 
-    roomId.isNotEmpty && 
-    status != JoinRoomStatus.loading;
+  bool get canJoin =>
+      roomId.trim().isNotEmpty &&
+      status != JoinRoomStatus.loading;
 
   JoinRoomState copyWith({
-    String? roomId, 
+    String? roomId,
     JoinRoomStatus? status,
     String? errorMessage,
     bool clearErrorMessage = false,
@@ -28,9 +28,9 @@ class JoinRoomState {
     return JoinRoomState(
       roomId: roomId ?? this.roomId,
       status: status ?? this.status,
-      errorMessage: clearErrorMessage 
-        ? null 
-        : errorMessage ?? this.errorMessage,
+      errorMessage: clearErrorMessage
+          ? null
+          : errorMessage ?? this.errorMessage,
     );
   }
 }

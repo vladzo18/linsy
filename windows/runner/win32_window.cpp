@@ -4,6 +4,7 @@
 #include <flutter_windows.h>
 
 #include "resource.h"
+#include "app_links/app_links_plugin_c_api.h"
 
 namespace {
 

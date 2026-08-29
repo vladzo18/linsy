@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:linsy/features/room/application/room_membership_service.dart';
 
+import '../../../../app/session/app_session_controller.dart';
+import '../../../auth/presentation/controllers/auth_controller.dart';
+import '../../data/providers/room_repository_provider.dart';
 import 'join_room_state.dart';
 
-final joinRoomControllerProvider = NotifierProvider<JoinRoomController, JoinRoomState>(
-  JoinRoomController.new,
-);
+final joinRoomControllerProvider =
+    NotifierProvider<JoinRoomController, JoinRoomState>(JoinRoomController.new);
 
 class JoinRoomController extends Notifier<JoinRoomState> {
   @override
@@ -14,18 +17,19 @@ class JoinRoomController extends Notifier<JoinRoomState> {
 
   void setRoomId(String roomId) {
     state = state.copyWith(
-      roomId: roomId, 
+      roomId: roomId.toUpperCase(),
       status: JoinRoomStatus.idle,
-      clearErrorMessage: true);
+      clearErrorMessage: true,
+    );
   }
 
   Future<String?> joinRoom() async {
-    final roomId = state.roomId.trim().toUpperCase();
+    final roomCode = state.roomId.trim().toUpperCase();
 
-    if (roomId.isEmpty) {
+    if (roomCode.isEmpty) {
       state = state.copyWith(
         status: JoinRoomStatus.error,
-        errorMessage: 'Enter a room ID',
+        errorMessage: 'Enter a room code.',
       );
 
       return null;
@@ -35,39 +39,91 @@ class JoinRoomController extends Notifier<JoinRoomState> {
       return null;
     }
 
-    state = state.copyWith(
-      roomId: roomId,
-      status: JoinRoomStatus.loading,
-      clearErrorMessage: true,
-    );
+    final authState = ref.read(authControllerProvider);
 
-    try {
-      // Simulate a network request to join the room
-      await Future.delayed(const Duration(milliseconds: 500));
+    final user = authState.user;
 
-      if (roomId != 'ABC123') {
-        state = state.copyWith(
-          status: JoinRoomStatus.error,
-          errorMessage: 'Room not found',
-        );
-
-        return null;
-      }
-
-      state = state.copyWith(
-        status: JoinRoomStatus.idle,
-      );
-
-      return roomId;
-      
-    } catch (error) {
+    if (user == null) {
       state = state.copyWith(
         status: JoinRoomStatus.error,
-        errorMessage: 'No able to join the room',
+        errorMessage: 'You must be signed in to join a room.',
       );
 
       return null;
     }
 
+    state = state.copyWith(
+      status: JoinRoomStatus.loading,
+      clearErrorMessage: true,
+    );
+
+    try {
+      // -------------------------------------------------------------
+      // ROOM LOOKUP
+      // -------------------------------------------------------------
+
+      final repository = ref.read(roomRepositoryProvider);
+
+      final room = await repository.getRoomByCode(roomCode);
+
+      if (room == null) {
+        state = state.copyWith(
+          status: JoinRoomStatus.error,
+          errorMessage: 'Room not found.',
+        );
+
+        return null;
+      }
+
+      // -------------------------------------------------------------
+      // JOIN
+      //
+      // Do not call repository.joinRoom directly.
+      // MembershipService also handles:
+      //
+      // - recent room history
+      // - Android exit registration
+      // -------------------------------------------------------------
+
+      await ref
+          .read(roomMembershipServiceProvider)
+          .joinRoom(roomId: room.id, userId: user.id);
+
+      // -------------------------------------------------------------
+      // SESSION
+      // -------------------------------------------------------------
+
+      ref.read(appSessionControllerProvider.notifier).enterRoom(room.id);
+
+      state = state.copyWith(
+        status: JoinRoomStatus.idle,
+        clearErrorMessage: true,
+      );
+
+      return room.id;
+    } catch (error) {
+      state = state.copyWith(
+        status: JoinRoomStatus.error,
+        errorMessage: _mapJoinError(error),
+      );
+
+      return null;
+    }
+  }
+
+  String _mapJoinError(Object error) {
+    final message = error.toString().toLowerCase();
+
+    if (message.contains('already in another room') ||
+        message.contains('duplicate') ||
+        message.contains('unique')) {
+      return 'You are already in another room. Leave it first.';
+    }
+
+    if (message.contains('room not found')) {
+      return 'Room not found.';
+    }
+
+    return 'Failed to join the room.';
   }
 }

@@ -6,6 +6,8 @@ enum AuthStatus {
   authenticating,
   authenticated,
   emailConfirmationRequired,
+  passwordResetRequested,
+  passwordRecovery,
   error,
 }
 
@@ -14,38 +16,43 @@ class AuthState {
   final AppUser? user;
   final String? errorMessage;
 
-  const AuthState({
-    required this.status,
-    this.user,
-    this.errorMessage,
-  });
+  const AuthState({required this.status, this.user, this.errorMessage});
 
   const AuthState.initializing()
-      : status = AuthStatus.initializing,
-        user = null,
-        errorMessage = null;
+    : status = AuthStatus.initializing,
+      user = null,
+      errorMessage = null;
 
   const AuthState.unauthenticated()
-      : status = AuthStatus.unauthenticated,
-        user = null,
-        errorMessage = null;
+    : status = AuthStatus.unauthenticated,
+      user = null,
+      errorMessage = null;
 
   const AuthState.authenticating()
-      : status = AuthStatus.authenticating,
-        user = null,
-        errorMessage = null;
+    : status = AuthStatus.authenticating,
+      user = null,
+      errorMessage = null;
 
   const AuthState.authenticated(AppUser this.user)
-      : status = AuthStatus.authenticated,
-        errorMessage = null;
+    : status = AuthStatus.authenticated,
+      errorMessage = null;
 
   const AuthState.emailConfirmationRequired()
-      : status = AuthStatus.emailConfirmationRequired,
-        user = null,
-        errorMessage = null;
+    : status = AuthStatus.emailConfirmationRequired,
+      user = null,
+      errorMessage = null;
 
   const AuthState.error(String message)
-      : status = AuthStatus.error,
-        user = null,
-        errorMessage = message;
+    : status = AuthStatus.error,
+      user = null,
+      errorMessage = message;
+
+  const AuthState.passwordResetRequested()
+    : status = AuthStatus.passwordResetRequested,
+      user = null,
+      errorMessage = null;
+
+  const AuthState.passwordRecovery(AppUser this.user)
+    : status = AuthStatus.passwordRecovery,
+      errorMessage = null;
 }

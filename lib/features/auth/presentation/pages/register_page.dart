@@ -318,7 +318,10 @@ class _RegisterPageState
                           onPressed: isLoading
                               ? null
                               : () {
-                                  ref.read(authControllerProvider.notifier).clearEmailConfirmation();
+                                   ref.read(authControllerProvider.notifier).clearEmailConfirmation();
+                                   ref
+                                      .read(authControllerProvider.notifier)
+                                      .clearAuthError();
                                   context.go('/login');
                                 },
                           child: const Text(
