@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:linsy/features/auth/domain/models/app_user.dart';
 import 'package:linsy/features/home/presentation/controllers/home_controller.dart';
 import 'package:linsy/features/room/application/room_membership_service.dart';
 
@@ -10,6 +11,7 @@ import '../../data/providers/room_repository_provider.dart';
 import '../../domain/models/room_member.dart';
 import '../../application/sync/room_consistency_coordinator_provider.dart';
 import '../../application/sync/room_snapshot_sync.dart';
+import '../../../profile/application/profile_store.dart';
 import 'room_state.dart';
 
 final roomControllerProvider = NotifierProvider.autoDispose
@@ -21,8 +23,6 @@ class RoomController extends Notifier<RoomState> {
   final String roomId;
 
   StreamSubscription<List<RoomMember>>? _membersSubscription;
-
-  StreamSubscription? _profilesSubscription;
 
   @override
   RoomState build() {
@@ -47,7 +47,7 @@ class RoomController extends Notifier<RoomState> {
         final uniqueMembers = <String, RoomMember>{};
 
         for (final member in members) {
-          uniqueMembers[member.user.id] = member;
+          uniqueMembers[member.userId] = member;
         }
 
         state = RoomState.ready(uniqueMembers.values.toList());
@@ -57,51 +57,6 @@ class RoomController extends Notifier<RoomState> {
     final unregisterSync = consistencyCoordinator.register(membersSync);
 
     // ===============================================================
-    // LOCAL PROFILE UPDATE
-    // ===============================================================
-    //
-    // Когда текущий пользователь сохраняет свой профиль,
-    // AuthController уже содержит новый AppUser.
-    // Поэтому обновляем его сразу, даже не ожидая realtime.
-    // ===============================================================
-
-    ref.listen(authControllerProvider, (previous, next) {
-      final user = next.user;
-
-      if (user == null) {
-        return;
-      }
-
-      if (state.status != RoomStatus.ready) {
-        return;
-      }
-
-      final currentMembers = state.members;
-
-      var found = false;
-
-      final updatedMembers = currentMembers.map((member) {
-        if (member.user.id != user.id) {
-          return member;
-        }
-
-        found = true;
-
-        return RoomMember(
-          user: user,
-          role: member.role,
-          joinedAt: member.joinedAt,
-        );
-      }).toList();
-
-      if (!found) {
-        return;
-      }
-
-      state = RoomState.ready(updatedMembers);
-    });
-
-    // ===============================================================
     // ROOM MEMBERS
     // ===============================================================
     //
@@ -109,64 +64,24 @@ class RoomController extends Notifier<RoomState> {
     // join / leave / role changes.
     // ===============================================================
 
-    _membersSubscription = repository
-        .watchRoomMembers(roomId)
-        .listen(
-          (members) {
-            final uniqueMembers = <String, RoomMember>{};
+    _membersSubscription = repository.watchRoomMembers(roomId).listen((
+      members,
+    ) {
+      final uniqueMembers = <String, RoomMember>{};
 
-            for (final member in members) {
-              uniqueMembers[member.user.id] = member;
-            }
-
-            state = RoomState.ready(uniqueMembers.values.toList());
-          },
-          onError: (Object error, StackTrace stackTrace) {
-            state = const RoomState.error('Failed to load room members.');
-          },
-        );
-
-    // ===============================================================
-    // PROFILE REALTIME
-    // ===============================================================
-    //
-    // Слушаем UPDATE таблицы profiles.
-    //
-    // В realtime могут приходить профили пользователей,
-    // которые вообще не находятся в этой комнате.
-    //
-    // Поэтому сначала ищем userId среди текущих участников.
-    // ===============================================================
-
-    _profilesSubscription = repository.watchProfileChanges().listen((profile) {
-      if (state.status != RoomStatus.ready) {
-        return;
+      for (final member in members) {
+        uniqueMembers[member.userId] = member;
       }
 
-      final currentMembers = state.members;
+      final result = uniqueMembers.values.toList();
 
-      final index = currentMembers.indexWhere(
-        (member) => member.user.id == profile.id,
+      state = RoomState.ready(result);
+
+      unawaited(
+        ref
+            .read(profileStoreProvider.notifier)
+            .ensureProfiles(result.map((member) => member.userId)),
       );
-
-      // Пользователь не находится в этой комнате.
-      if (index == -1) {
-        return;
-      }
-
-      final oldMember = currentMembers[index];
-
-      final updatedMember = RoomMember(
-        user: profile,
-        role: oldMember.role,
-        joinedAt: oldMember.joinedAt,
-      );
-
-      final updatedMembers = List<RoomMember>.from(currentMembers);
-
-      updatedMembers[index] = updatedMember;
-
-      state = RoomState.ready(updatedMembers);
     });
 
     // ===============================================================
@@ -175,16 +90,11 @@ class RoomController extends Notifier<RoomState> {
 
     ref.onDispose(() {
       unregisterSync();
-
       membersSync.dispose();
-
       unawaited(_membersSubscription?.cancel());
-
-      unawaited(_profilesSubscription?.cancel());
-
       _membersSubscription = null;
-      _profilesSubscription = null;
     });
+
     return const RoomState.loading();
   }
 

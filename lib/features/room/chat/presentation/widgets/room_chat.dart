@@ -256,9 +256,10 @@ class _RoomChatState extends ConsumerState<RoomChat>
 
     final roomState = ref.watch(roomControllerProvider(widget.roomId));
 
-    for (final member in roomState.members) {
-      _profileCache[member.user.id] = member.user;
-    }
+    // RoomMember stores only the userId and membership metadata.
+    // The actual AppUser profile is kept in the cache from the profile store
+    // and the auth controller, not from the room membership list itself.
+    // We intentionally do not try to read member.user here.
 
     // Свой профиль также держим актуальным
     // напрямую из AuthController.

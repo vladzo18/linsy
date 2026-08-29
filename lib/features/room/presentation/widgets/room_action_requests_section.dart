@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:linsy/features/profile/application/profile_store.dart';
 import '../../domain/models/room_action_request.dart';
 import '../controllers/action_request_controller.dart';
 import '../controllers/room_state.dart';
@@ -26,7 +26,7 @@ class RoomActionRequestsSection extends ConsumerWidget {
     }
 
     final currentMember = roomState.members
-        .where((member) => member.user.id == currentUserId)
+        .where((member) => member.userId == currentUserId)
         .firstOrNull;
 
     if (currentMember == null) {
@@ -420,7 +420,7 @@ class _IncomingRequests extends ConsumerWidget {
 // INCOMING REQUEST CARD
 // =====================================================================
 
-class _IncomingRequestCard extends StatelessWidget {
+class _IncomingRequestCard extends ConsumerWidget {
   const _IncomingRequestCard({
     required this.request,
     required this.roomState,
@@ -435,16 +435,20 @@ class _IncomingRequestCard extends StatelessWidget {
   final Future<void> Function() onApprove;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
 
     final member = roomState.members
-        .where((member) => member.user.id == request.userId)
+        .where((member) => member.userId == request.userId)
         .firstOrNull;
 
-    final name = member?.user.name ?? 'Linsy user';
+    final userId = member?.userId ?? request.userId;
 
-    final avatarUrl = member?.user.avatarUrl;
+    final profile = ref.watch(profileByIdProvider(userId));
+
+    final name = profile?.displayName ?? 'User';
+
+    final avatarUrl = profile?.avatarUrl;
 
     final subtitle = _requestPayloadText(request);
 

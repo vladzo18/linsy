@@ -1,4 +1,3 @@
-import 'package:linsy/features/auth/domain/models/app_user.dart';
 import 'package:linsy/features/room/domain/models/room.dart';
 import 'package:linsy/features/room/domain/models/room_member.dart';
 
@@ -6,8 +5,6 @@ abstract interface class RoomRepository {
   Future<Room> createRoom({required String name, required String hostId});
 
   Future<Room?> getRoomByCode(String roomCode);
-
-  Stream<AppUser> watchProfileChanges();
 
   Future<Room?> getCurrentUserRoom(String userId);
 

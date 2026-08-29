@@ -262,11 +262,11 @@ class _RoomWorkPanelState extends ConsumerState<_RoomWorkPanel>
     }
 
     final oldMemberIds = oldWidget.roomState.members
-        .map((member) => member.user.id)
+        .map((member) => member.userId)
         .toSet();
 
     final newMemberIds = widget.roomState.members
-        .map((member) => member.user.id)
+        .map((member) => member.userId)
         .toSet();
 
     // Если набор участников вообще не изменился —
@@ -586,7 +586,7 @@ class _RoomWorkPanelState extends ConsumerState<_RoomWorkPanel>
 
       final canHandleRequests = widget.roomState.members.any(
         (member) =>
-            member.user.id == currentUserId && member.canControlPlayback,
+            member.userId == currentUserId && member.canControlPlayback,
       );
 
       if (!canHandleRequests) {

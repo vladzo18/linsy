@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:linsy/features/profile/application/profile_store.dart';
 
 import '../../data/providers/room_repository_provider.dart';
 import '../../domain/models/room_member.dart';
@@ -24,7 +25,7 @@ class RoomParticipantsBar extends ConsumerWidget {
     }
 
     final currentMember = roomState.members
-        .where((member) => member.user.id == currentUserId)
+        .where((member) => member.userId == currentUserId)
         .firstOrNull;
 
     final canManageRoles = currentMember?.isHost ?? false;
@@ -75,6 +76,10 @@ class _ParticipantPill extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileByIdProvider(member.userId));
+    final displayName = profile?.displayName ?? 'User';
+    final avatarUrl = profile?.avatarUrl;
+
     final pill = Container(
       padding: const EdgeInsets.fromLTRB(6, 5, 10, 5),
       decoration: BoxDecoration(
@@ -86,18 +91,18 @@ class _ParticipantPill extends ConsumerWidget {
         children: [
           CircleAvatar(
             radius: 17,
-            backgroundImage: member.user.avatarUrl != null
-                ? NetworkImage(member.user.avatarUrl!)
+            backgroundImage: avatarUrl != null
+                ? NetworkImage(avatarUrl)
                 : null,
-            child: member.user.avatarUrl == null
-                ? Text(_initial(member.user.name))
+            child: avatarUrl == null
+                ? Text(_initial(displayName))
                 : null,
           ),
 
           const SizedBox(width: 8),
 
           Text(
-            member.user.name ?? 'Linsy user',
+            displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.labelLarge,
@@ -153,7 +158,7 @@ class _ParticipantPill extends ConsumerWidget {
     try {
       await ref
           .read(roomRepositoryProvider)
-          .setMemberRole(roomId: roomId, userId: member.user.id, role: role);
+          .setMemberRole(roomId: roomId, userId: member.userId, role: role);
     } catch (error) {
       if (!context.mounted) {
         return;

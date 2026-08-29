@@ -1,5 +1,3 @@
-import '../../../auth/domain/models/app_user.dart';
-
 enum RoomMemberRole {
   host,
   moderator,
@@ -23,12 +21,12 @@ enum RoomMemberRole {
 }
 
 class RoomMember {
-  final AppUser user;
+  final String userId;
   final RoomMemberRole role;
   final DateTime joinedAt;
 
   const RoomMember({
-    required this.user,
+    required this.userId,
     required this.role,
     required this.joinedAt,
   });

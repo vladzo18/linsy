@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:linsy/features/profile/application/profile_store.dart';
 
 import '../../data/providers/room_repository_provider.dart';
 import '../../domain/models/room_member.dart';
@@ -40,7 +41,7 @@ class RoomMembersSection extends ConsumerWidget {
 
   Widget _buildReady(BuildContext context, WidgetRef ref) {
     final currentMember = state.members
-        .where((member) => member.user.id == currentUserId)
+        .where((member) => member.userId == currentUserId)
         .firstOrNull;
 
     final canManageRoles = currentMember?.isHost ?? false;
@@ -82,20 +83,24 @@ class _MemberTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileByIdProvider(member.userId));
+    final displayName = profile?.displayName ?? 'User';
+    final avatarUrl = profile?.avatarUrl;
+
     return ListTile(
       contentPadding: EdgeInsets.zero,
 
       leading: CircleAvatar(
-        backgroundImage: member.user.avatarUrl != null
-            ? NetworkImage(member.user.avatarUrl!)
+        backgroundImage: avatarUrl != null
+            ? NetworkImage(avatarUrl)
             : null,
 
-        child: member.user.avatarUrl == null
-            ? Text(_initial(member.user.name))
+        child: avatarUrl == null
+            ? Text(_initial(displayName))
             : null,
       ),
 
-      title: Text(member.user.name ?? 'Linsy user'),
+      title: Text(displayName),
 
       subtitle: Text(_roleLabel(member.role)),
 
@@ -140,7 +145,7 @@ class _MemberTile extends ConsumerWidget {
     try {
       await ref
           .read(roomRepositoryProvider)
-          .setMemberRole(roomId: roomId, userId: member.user.id, role: role);
+          .setMemberRole(roomId: roomId, userId: member.userId, role: role);
     } catch (error) {
       if (!context.mounted) {
         return;

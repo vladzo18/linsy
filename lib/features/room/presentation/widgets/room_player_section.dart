@@ -31,7 +31,7 @@ class RoomPlayerSection extends ConsumerWidget {
 
       data: (playback) {
         final currentMember = roomState.members
-            .where((member) => member.user.id == currentUserId)
+            .where((member) => member.userId == currentUserId)
             .firstOrNull;
 
         final canControlPlayback = currentMember?.canControlPlayback ?? false;

@@ -28,7 +28,7 @@ class RoomQueueSection extends ConsumerWidget {
     }
 
     final currentMember = roomState.members
-        .where((member) => member.user.id == currentUserId)
+        .where((member) => member.userId == currentUserId)
         .firstOrNull;
 
     if (currentMember == null) {

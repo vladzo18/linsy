@@ -57,54 +57,6 @@ class SupabaseRoomRepository implements RoomRepository {
   }
 
   @override
-  Stream<AppUser> watchProfileChanges() {
-    final controller = StreamController<AppUser>();
-
-    RealtimeChannel? channel;
-
-    channel = _client
-        .channel('profile-changes-${DateTime.now().microsecondsSinceEpoch}')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'profiles',
-          callback: (payload) {
-            final data = payload.newRecord;
-
-            final userId = data['id'] as String?;
-
-            if (userId == null) {
-              return;
-            }
-
-            if (!controller.isClosed) {
-              controller.add(
-                AppUser(
-                  id: userId,
-                  email: null,
-                  name: data['display_name'] as String?,
-                  avatarUrl: data['avatar_url'] as String?,
-                ),
-              );
-            }
-          },
-        )
-        .subscribe();
-
-    controller.onCancel = () async {
-      final currentChannel = channel;
-
-      if (currentChannel != null) {
-        await _client.removeChannel(currentChannel);
-      }
-
-      await controller.close();
-    };
-
-    return controller.stream;
-  }
-
-  @override
   Future<Room?> getCurrentUserRoom(String userId) async {
     final response = await _client
         .from('room_members')
@@ -264,45 +216,19 @@ class SupabaseRoomRepository implements RoomRepository {
         .from('room_members')
         .select()
         .eq('room_id', roomId)
-        .order('joined_at');
-
-    if (rows.isEmpty) {
-      return [];
-    }
-
-    final userIds = rows
-        .map((row) => row['user_id'] as String)
-        .toSet()
-        .toList();
-
-    final profiles = await _client
-        .from('profiles')
-        .select()
-        .inFilter('id', userIds);
-
-    final profilesById = <String, Map<String, dynamic>>{
-      for (final profile in profiles)
-        profile['id'] as String: Map<String, dynamic>.from(profile),
-    };
+        .order('joined_at', ascending: true);
 
     return rows.map((row) {
-      final userId = row['user_id'] as String;
-
-      final profile = profilesById[userId];
-
-      if (profile == null) {
-        throw StateError('Profile not found for user $userId.');
-      }
+      final data = Map<String, dynamic>.from(row);
 
       return RoomMember(
-        user: AppUser(
-          id: userId,
-          email: null,
-          name: profile['display_name'] as String?,
-          avatarUrl: profile['avatar_url'] as String?,
-        ),
-        role: RoomMemberRole.fromString(row['role'] as String),
-        joinedAt: DateTime.parse(row['joined_at'] as String),
+        userId: data['user_id'] as String,
+
+        // Оставь здесь тот mapping роли,
+        // который у тебя используется сейчас.
+        role: RoomMemberRole.fromString(data['role'] as String),
+
+        joinedAt: DateTime.parse(data['joined_at'] as String),
       );
     }).toList();
   }
