@@ -1,7 +1,5 @@
 import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../application/sync/room_consistency_coordinator_provider.dart';
 import '../../application/sync/room_snapshot_sync.dart';
 import '../../data/providers/queue_repository_provider.dart';
@@ -119,13 +117,7 @@ class QueueController extends AsyncNotifier<List<RoomQueueItem>> {
     }
 
     if (_mutationInProgress) {
-      // Не применяем snapshot неизвестной свежести
-      // поверх optimistic mutation.
-      //
-      // Просто запоминаем, что после RPC нужно
-      // ещё раз спросить authoritative state.
       _externalChangedDuringMutation = true;
-
       return;
     }
 

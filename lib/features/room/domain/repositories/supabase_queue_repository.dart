@@ -5,8 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/models/room_queue_item.dart';
 import '../../domain/repositories/queue_repository.dart';
 
-class SupabaseQueueRepository
-    implements QueueRepository {
+class SupabaseQueueRepository implements QueueRepository {
   SupabaseQueueRepository(this._client);
 
   final SupabaseClient _client;
@@ -15,29 +14,37 @@ class SupabaseQueueRepository
   // GET
   // ===================================================
 
-  @override
-  Future<List<RoomQueueItem>> getQueue(
-    String roomId,
-  ) async {
-    final rows = await _client
-        .from('room_queue_items')
-        .select()
-        .eq('room_id', roomId)
-        .order('position')
-        .order('created_at')
-        .order('id');
+ @override
+Future<List<RoomQueueItem>> getQueue(
+  String roomId,
+) async {
+  final rows = await _client
+      .from('room_queue_items')
+      .select()
+      .eq('room_id', roomId)
+      .order(
+        'position',
+        ascending: true,
+      )
+      .order(
+        'created_at',
+        ascending: true,
+      )
+      .order(
+        'id',
+        ascending: true,
+      );
 
-    return rows
-        .map(
-          (row) => _mapQueueItem(
-            Map<String, dynamic>.from(
-              row,
-            ),
-          ),
-        )
-        .toList();
-  }
+  final items = rows
+      .map(
+        (row) => _mapQueueItem(
+          Map<String, dynamic>.from(row),
+        ),
+      )
+      .toList();
 
+  return items;
+}
   // ===================================================
   // ADD
   // ===================================================
@@ -57,8 +64,7 @@ class SupabaseQueueRepository
         'p_room_id': roomId,
         'p_track_id': trackId,
         'p_title': title,
-        'p_thumbnail_url':
-            thumbnailUrl,
+        'p_thumbnail_url': thumbnailUrl,
         'p_duration_ms': durationMs,
         'p_source': source,
       },
@@ -71,11 +77,7 @@ class SupabaseQueueRepository
       );
     }
 
-    return _mapQueueItem(
-      Map<String, dynamic>.from(
-        response,
-      ),
-    );
+    return _mapQueueItem(Map<String, dynamic>.from(response));
   }
 
   // ===================================================
@@ -83,15 +85,8 @@ class SupabaseQueueRepository
   // ===================================================
 
   @override
-  Future<void> removeItem({
-    required String itemId,
-  }) async {
-    await _client.rpc(
-      'remove_room_queue_item',
-      params: {
-        'p_item_id': itemId,
-      },
-    );
+  Future<void> removeItem({required String itemId}) async {
+    await _client.rpc('remove_room_queue_item', params: {'p_item_id': itemId});
   }
 
   // ===================================================
@@ -99,8 +94,7 @@ class SupabaseQueueRepository
   // ===================================================
 
   @override
-  Future<List<RoomQueueItem>>
-      reorderItem({
+  Future<List<RoomQueueItem>> reorderItem({
     required String roomId,
     required String itemId,
     required int newIndex,
@@ -129,11 +123,7 @@ class SupabaseQueueRepository
         );
       }
 
-      return _mapQueueItem(
-        Map<String, dynamic>.from(
-          row,
-        ),
-      );
+      return _mapQueueItem(Map<String, dynamic>.from(row));
     }).toList();
 
     // Сервер уже возвращает ordered result,
@@ -148,17 +138,11 @@ class SupabaseQueueRepository
   // ===================================================
 
   @override
-  Stream<List<RoomQueueItem>> watchQueue(
-    String roomId,
-  ) {
+  Stream<List<RoomQueueItem>> watchQueue(String roomId) {
     // sync:true нужен, чтобы между controller.add()
     // и QueueController listener не оставалось
     // дополнительного асинхронного окна.
-    final controller =
-        StreamController<
-            List<RoomQueueItem>>(
-      sync: true,
-    );
+    final controller = StreamController<List<RoomQueueItem>>(sync: true);
 
     RealtimeChannel? channel;
 
@@ -196,11 +180,9 @@ class SupabaseQueueRepository
         do {
           reloadRequested = false;
 
-          final items =
-              await getQueue(roomId);
+          final items = await getQueue(roomId);
 
-          if (disposed ||
-              controller.isClosed) {
+          if (disposed || controller.isClosed) {
             return;
           }
 
@@ -218,29 +200,19 @@ class SupabaseQueueRepository
 
           controller.add(items);
         } while (reloadRequested);
-      } catch (
-        error,
-        stackTrace
-      ) {
-        if (!disposed &&
-            !controller.isClosed) {
-          controller.addError(
-            error,
-            stackTrace,
-          );
+      } catch (error, stackTrace) {
+        if (!disposed && !controller.isClosed) {
+          controller.addError(error, stackTrace);
         }
       } finally {
         loading = false;
 
         // На случай если request пришёл
         // прямо на границе завершения цикла.
-        if (reloadRequested &&
-            !disposed) {
+        if (reloadRequested && !disposed) {
           reloadRequested = false;
 
-          unawaited(
-            reloadQueue(),
-          );
+          unawaited(reloadQueue());
         }
       }
     }
@@ -259,16 +231,9 @@ class SupabaseQueueRepository
       // Reorder обновляет сразу несколько rows.
       // Объединяем пачку UPDATE events
       // в один SELECT.
-      reloadTimer = Timer(
-        const Duration(
-          milliseconds: 120,
-        ),
-        () {
-          unawaited(
-            reloadQueue(),
-          );
-        },
-      );
+      reloadTimer = Timer(const Duration(milliseconds: 120), () {
+        unawaited(reloadQueue());
+      });
     }
 
     // =================================================
@@ -276,16 +241,13 @@ class SupabaseQueueRepository
     // =================================================
 
     void startInitialLoad() {
-      if (disposed ||
-          initialLoadStarted) {
+      if (disposed || initialLoadStarted) {
         return;
       }
 
       initialLoadStarted = true;
 
-      unawaited(
-        reloadQueue(),
-      );
+      unawaited(reloadQueue());
     }
 
     // =================================================
@@ -299,14 +261,11 @@ class SupabaseQueueRepository
           '${DateTime.now().microsecondsSinceEpoch}',
         )
         .onPostgresChanges(
-          event:
-              PostgresChangeEvent.all,
+          event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'room_queue_items',
-          filter:
-              PostgresChangeFilter(
-            type:
-                PostgresChangeFilterType.eq,
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
             column: 'room_id',
             value: roomId,
           ),
@@ -314,36 +273,27 @@ class SupabaseQueueRepository
             scheduleReload();
           },
         )
-        .subscribe(
-          (status, error) {
-            if (disposed) {
-              return;
-            }
+        .subscribe((status, error) {
+          if (disposed) {
+            return;
+          }
 
-            if (status ==
-                RealtimeSubscribeStatus
-                    .subscribed) {
-              initialFallbackTimer
-                  ?.cancel();
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            initialFallbackTimer?.cancel();
 
-              initialFallbackTimer =
-                  null;
+            initialFallbackTimer = null;
 
-              // Только после SUBSCRIBED
-              // берём initial DB snapshot.
-              startInitialLoad();
-            }
-          },
-        );
+            // Только после SUBSCRIBED
+            // берём initial DB snapshot.
+            startInitialLoad();
+          }
+        });
 
     // Если Realtime сейчас временно лежит,
     // не оставляем UI бесконечно loading.
     //
     // REST snapshot всё равно можно получить.
-    initialFallbackTimer = Timer(
-      const Duration(seconds: 3),
-      startInitialLoad,
-    );
+    initialFallbackTimer = Timer(const Duration(seconds: 3), startInitialLoad);
 
     // =================================================
     // DISPOSE
@@ -363,9 +313,7 @@ class SupabaseQueueRepository
       channel = null;
 
       if (currentChannel != null) {
-        await _client.removeChannel(
-          currentChannel,
-        );
+        await _client.removeChannel(currentChannel);
       }
 
       if (!controller.isClosed) {
@@ -380,23 +328,14 @@ class SupabaseQueueRepository
   // SORT
   // ===================================================
 
-  int _compareQueueItems(
-    RoomQueueItem a,
-    RoomQueueItem b,
-  ) {
-    final positionCompare =
-        a.position.compareTo(
-      b.position,
-    );
+  int _compareQueueItems(RoomQueueItem a, RoomQueueItem b) {
+    final positionCompare = a.position.compareTo(b.position);
 
     if (positionCompare != 0) {
       return positionCompare;
     }
 
-    final timeCompare =
-        a.createdAt.compareTo(
-      b.createdAt,
-    );
+    final timeCompare = a.createdAt.compareTo(b.createdAt);
 
     if (timeCompare != 0) {
       return timeCompare;
@@ -409,33 +348,18 @@ class SupabaseQueueRepository
   // MAP
   // ===================================================
 
-  RoomQueueItem _mapQueueItem(
-    Map<String, dynamic> data,
-  ) {
+  RoomQueueItem _mapQueueItem(Map<String, dynamic> data) {
     return RoomQueueItem(
       id: data['id'] as String,
-      roomId:
-          data['room_id'] as String,
-      source:
-          data['source'] as String,
-      trackId:
-          data['track_id'] as String,
-      title:
-          data['title'] as String?,
-      thumbnailUrl:
-          data['thumbnail_url']
-              as String?,
-      durationMs:
-          (data['duration_ms'] as num?)
-              ?.toInt(),
-      position:
-          (data['position'] as num)
-              .toInt(),
-      addedBy:
-          data['added_by'] as String,
-      createdAt: DateTime.parse(
-        data['created_at'] as String,
-      ),
+      roomId: data['room_id'] as String,
+      source: data['source'] as String,
+      trackId: data['track_id'] as String,
+      title: data['title'] as String?,
+      thumbnailUrl: data['thumbnail_url'] as String?,
+      durationMs: (data['duration_ms'] as num?)?.toInt(),
+      position: (data['position'] as num).toInt(),
+      addedBy: data['added_by'] as String,
+      createdAt: DateTime.parse(data['created_at'] as String),
     );
   }
 }
