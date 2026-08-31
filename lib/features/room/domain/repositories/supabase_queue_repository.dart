@@ -14,37 +14,22 @@ class SupabaseQueueRepository implements QueueRepository {
   // GET
   // ===================================================
 
- @override
-Future<List<RoomQueueItem>> getQueue(
-  String roomId,
-) async {
-  final rows = await _client
-      .from('room_queue_items')
-      .select()
-      .eq('room_id', roomId)
-      .order(
-        'position',
-        ascending: true,
-      )
-      .order(
-        'created_at',
-        ascending: true,
-      )
-      .order(
-        'id',
-        ascending: true,
-      );
+  @override
+  Future<List<RoomQueueItem>> getQueue(String roomId) async {
+    final rows = await _client
+        .from('room_queue_items')
+        .select()
+        .eq('room_id', roomId)
+        .order('position', ascending: true)
+        .order('created_at', ascending: true)
+        .order('id', ascending: true);
 
-  final items = rows
-      .map(
-        (row) => _mapQueueItem(
-          Map<String, dynamic>.from(row),
-        ),
-      )
-      .toList();
+    final items = rows
+        .map((row) => _mapQueueItem(Map<String, dynamic>.from(row)))
+        .toList();
 
-  return items;
-}
+    return items;
+  }
   // ===================================================
   // ADD
   // ===================================================
@@ -57,12 +42,61 @@ Future<List<RoomQueueItem>> getQueue(
     String? thumbnailUrl,
     int? durationMs,
     String source = 'youtube',
+    String? addedBy,
   }) async {
+    // =================================================
+    // NORMAL ADD
+    // =================================================
+    //
+    // Host/moderator добавляет трек самостоятельно.
+    //
+    // Старый RPC сам запишет:
+    //
+    // added_by = auth.uid()
+    // =================================================
+
+    if (addedBy == null) {
+      final response = await _client.rpc(
+        'add_room_queue_item',
+        params: {
+          'p_room_id': roomId,
+          'p_track_id': trackId,
+          'p_title': title,
+          'p_thumbnail_url': thumbnailUrl,
+          'p_duration_ms': durationMs,
+          'p_source': source,
+        },
+      );
+
+      if (response is! Map) {
+        throw StateError(
+          'Invalid response from '
+          'add_room_queue_item.',
+        );
+      }
+
+      return _mapQueueItem(Map<String, dynamic>.from(response));
+    }
+
+    // =================================================
+    // ATTRIBUTED ADD
+    // =================================================
+    //
+    // Например:
+    //
+    // Sasha -> Request track
+    // Vlad  -> Approve
+    //
+    // RPC вызывается Владом,
+    // но added_by должен остаться Sasha.
+    // =================================================
+
     final response = await _client.rpc(
-      'add_room_queue_item',
+      'add_room_queue_item_for_user',
       params: {
         'p_room_id': roomId,
         'p_track_id': trackId,
+        'p_added_by': addedBy,
         'p_title': title,
         'p_thumbnail_url': thumbnailUrl,
         'p_duration_ms': durationMs,
@@ -73,7 +107,7 @@ Future<List<RoomQueueItem>> getQueue(
     if (response is! Map) {
       throw StateError(
         'Invalid response from '
-        'add_room_queue_item.',
+        'add_room_queue_item_for_user.',
       );
     }
 

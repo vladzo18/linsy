@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:linsy/features/profile/application/profile_store.dart';
 import 'package:linsy/features/room/playback_history/application/room_playback_history_provider.dart';
 import 'package:linsy/features/room/playback_history/domain/models/room_playback_history_item.dart';
 import 'package:linsy/features/room/playback_history/presentation/room_playback_history_view.dart';
@@ -297,7 +298,7 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
 // QUEUE STATUS HEADER
 // =====================================================================
 
-class _QueueStatusHeader extends StatelessWidget {
+class _QueueStatusHeader extends ConsumerWidget {
   const _QueueStatusHeader({
     required this.playbackState,
     required this.items,
@@ -321,12 +322,23 @@ class _QueueStatusHeader extends StatelessWidget {
   final bool showHistory;
 
   final VoidCallback? onToggleHistory;
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
 
     final playback = playbackState.value;
+
+    final addedByUserId = playback?.addedBy;
+
+    final addedByProfile = addedByUserId == null
+        ? null
+        : ref.watch(profileByIdProvider(addedByUserId));
+
+    final addedByName = addedByProfile?.displayName?.trim();
+
+    final addedByLabel = addedByName != null && addedByName.isNotEmpty
+        ? addedByName
+        : 'Linsy user';
 
     final playbackLoading = playbackState.isLoading && playback == null;
 
@@ -417,6 +429,34 @@ class _QueueStatusHeader extends StatelessWidget {
                       const _PlaybackStatusBadge.idle()
                     else
                       _PlaybackStatusBadge(isPlaying: playback.isPlaying),
+
+                    if (hasTrack && addedByUserId != null) ...[
+                      const SizedBox(height: 5),
+
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.person_outline_rounded,
+                            size: 13,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+
+                          const SizedBox(width: 4),
+
+                          Flexible(
+                            child: Text(
+                              'Added by $addedByLabel',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1041,7 +1081,7 @@ class _QueueDragHandle extends StatelessWidget {
 // QUEUE ITEM
 // =====================================================================
 
-class _QueueItemTile extends StatelessWidget {
+class _QueueItemTile extends ConsumerWidget {
   const _QueueItemTile({
     super.key,
     required this.item,
@@ -1063,10 +1103,18 @@ class _QueueItemTile extends StatelessWidget {
   final Widget? dragHandle;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
 
     final compact = MediaQuery.sizeOf(context).width < 600;
+
+    final addedByProfile = ref.watch(profileByIdProvider(item.addedBy));
+
+    final addedByName = addedByProfile?.displayName?.trim();
+
+    final addedByLabel = addedByName != null && addedByName.isNotEmpty
+        ? addedByName
+        : 'Linsy user';
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -1155,6 +1203,31 @@ class _QueueItemTile extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ],
+                ),
+
+                const SizedBox(height: 3),
+
+                Row(
+                  children: [
+                    Icon(
+                      Icons.person_outline_rounded,
+                      size: 13,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+
+                    const SizedBox(width: 4),
+
+                    Flexible(
+                      child: Text(
+                        'Added by $addedByLabel',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ],

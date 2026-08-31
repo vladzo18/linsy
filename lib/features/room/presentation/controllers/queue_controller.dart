@@ -134,6 +134,7 @@ class QueueController extends AsyncNotifier<List<RoomQueueItem>> {
     String? thumbnailUrl,
     int? durationMs,
     String source = 'youtube',
+    String? addedBy,
   }) {
     return _enqueueMutation<void>(() async {
       final repository = ref.read(queueRepositoryProvider);
@@ -152,6 +153,7 @@ class QueueController extends AsyncNotifier<List<RoomQueueItem>> {
             thumbnailUrl: thumbnailUrl,
             durationMs: durationMs,
             source: source,
+            addedBy: addedBy,
           );
         },
       );

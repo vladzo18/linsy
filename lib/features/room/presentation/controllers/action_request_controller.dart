@@ -196,6 +196,7 @@ class ActionRequestController extends AsyncNotifier<List<RoomActionRequest>> {
               thumbnailUrl: thumbnailUrl is String ? thumbnailUrl : null,
               durationMs: durationValue is num ? durationValue.toInt() : null,
               source: source is String ? source : 'youtube',
+              addedBy: request.userId,
             );
 
         break;

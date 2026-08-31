@@ -10,6 +10,7 @@ abstract interface class QueueRepository {
     String? thumbnailUrl,
     int? durationMs,
     String source = 'youtube',
+    String? addedBy,
   });
 
   Future<void> removeItem({required String itemId});

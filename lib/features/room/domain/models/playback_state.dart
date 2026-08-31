@@ -7,6 +7,9 @@ class PlaybackState {
 
   final int? durationMs;
 
+  /// User who originally added/requested this track.
+  final String? addedBy;
+
   final bool isPlaying;
 
   /// Checkpoint position.
@@ -15,17 +18,6 @@ class PlaybackState {
   /// Time when the playback row was last modified.
   final DateTime updatedAt;
 
-  /// When playback should actually start.
-  ///
-  /// null:
-  /// - paused
-  /// - or legacy playback state
-  ///
-  /// future:
-  /// - clients should prepare but NOT play yet
-  ///
-  /// past:
-  /// - playback is already running
   final DateTime? scheduledStartAt;
 
   final String? updatedBy;
@@ -36,6 +28,7 @@ class PlaybackState {
     required this.title,
     required this.thumbnailUrl,
     required this.durationMs,
+    required this.addedBy,
     required this.isPlaying,
     required this.positionMs,
     required this.updatedAt,
@@ -50,6 +43,7 @@ class PlaybackState {
       title: null,
       thumbnailUrl: null,
       durationMs: null,
+      addedBy: null,
       isPlaying: false,
       positionMs: 0,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -67,8 +61,6 @@ class PlaybackState {
 
     final utcNow = now.toUtc();
 
-    // Если есть запланированный старт,
-    // позиция НЕ движется до scheduledStartAt.
     final scheduled = scheduledStartAt?.toUtc();
 
     if (scheduled != null) {
@@ -81,10 +73,6 @@ class PlaybackState {
       return _clampPosition(result);
     }
 
-    // Legacy fallback.
-    //
-    // Нужен пока Next / auto-next ещё используют
-    // старую схему через updatedAt.
     final elapsed = utcNow.difference(updatedAt.toUtc()).inMilliseconds;
 
     if (elapsed > 0) {
