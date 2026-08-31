@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:linsy/features/room/playback_history/application/room_playback_history_provider.dart';
+import 'package:linsy/features/room/playback_history/domain/models/room_playback_history_item.dart';
+import 'package:linsy/features/room/playback_history/presentation/room_playback_history_view.dart';
 
 import '../../domain/models/playback_state.dart';
 import '../../domain/models/room_queue_item.dart';
@@ -11,7 +14,7 @@ import '../controllers/queue_controller.dart';
 import '../controllers/room_state.dart';
 import 'track_search_dialog.dart';
 
-class RoomQueueSection extends ConsumerWidget {
+class RoomQueueSection extends ConsumerStatefulWidget {
   const RoomQueueSection({
     required this.roomId,
     required this.roomState,
@@ -24,22 +27,39 @@ class RoomQueueSection extends ConsumerWidget {
   final String? currentUserId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (roomState.status != RoomStatus.ready || currentUserId == null) {
+  ConsumerState<RoomQueueSection> createState() => _RoomQueueSectionState();
+}
+
+class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
+  bool _showHistory = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.roomState.status != RoomStatus.ready ||
+        widget.currentUserId == null) {
       return const SizedBox.shrink();
     }
 
-    final currentMember = roomState.members
-        .where((member) => member.userId == currentUserId)
+    final currentMember = widget.roomState.members
+        .where((member) => member.userId == widget.currentUserId)
         .firstOrNull;
 
     if (currentMember == null) {
       return const SizedBox.shrink();
     }
 
-    final queueState = ref.watch(queueControllerProvider(roomId));
+    final queueState = ref.watch(queueControllerProvider(widget.roomId));
 
-    final playbackState = ref.watch(playbackControllerProvider(roomId));
+    final playbackState = ref.watch(playbackControllerProvider(widget.roomId));
+
+    final historyState = ref.watch(roomPlaybackHistoryProvider(widget.roomId));
+
+    final historyItems =
+        historyState.value ?? const <RoomPlaybackHistoryItem>[];
+
+    final hasHistory = historyItems.isNotEmpty;
+
+    final showHistory = _showHistory && hasHistory;
 
     final canManage = currentMember.canControlPlayback;
 
@@ -64,35 +84,103 @@ class RoomQueueSection extends ConsumerWidget {
             children: [
               // ===================================================
               // QUEUE STATUS
+              //
+              // ОСТАЁТСЯ ВСЕГДА.
+              // History заменяет только список ниже.
               // ===================================================
               _QueueStatusHeader(
                 playbackState: playbackState,
                 items: items,
                 canManage: canManage,
-                onAddTrack: canManage ? () => _addTrack(context, ref) : null,
+                onAddTrack: canManage ? () => _addTrack(context) : null,
+                hasHistory: hasHistory,
+                showHistory: showHistory,
+                onToggleHistory: hasHistory
+                    ? () {
+                        setState(() {
+                          _showHistory = !showHistory;
+                        });
+                      }
+                    : null,
               ),
 
               const SizedBox(height: 14),
 
+              if (showHistory) ...[
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Back to queue',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () {
+                        setState(() {
+                          _showHistory = false;
+                        });
+                      },
+                      icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                    ),
+
+                    const SizedBox(width: 2),
+
+                    const Icon(Icons.history_rounded, size: 18),
+
+                    const SizedBox(width: 6),
+
+                    Text(
+                      'History',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 6),
+
+                Divider(
+                  height: 1,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outlineVariant.withValues(alpha: 0.55),
+                ),
+
+                const SizedBox(height: 10),
+              ],
               // ===================================================
-              // EMPTY
+              // HISTORY
               // ===================================================
-              if (items.isEmpty)
+              if (showHistory)
+                Expanded(
+                  child: RoomPlaybackHistoryView(
+                    items: historyItems,
+                    canManage: canManage,
+                    onAddToQueue: (item) {
+                      return _addHistoryTrack(context, item);
+                    },
+                  ),
+                )
+              // ===================================================
+              // EMPTY QUEUE
+              // ===================================================
+              else if (items.isEmpty)
                 const Expanded(child: _EmptyQueue())
               // ===================================================
-              // QUEUE
+              // NORMAL QUEUE
               // ===================================================
               else
                 Expanded(
                   child: canManage
                       ? _DraggableQueue(
-                          roomId: roomId,
+                          roomId: widget.roomId,
                           items: items,
-                          onRemove: (itemId) =>
-                              _removeTrack(context, ref, itemId),
+                          onRemove: (itemId) => _removeTrack(context, itemId),
                           onReorder: (itemId, newIndex) {
                             return ref
-                                .read(queueControllerProvider(roomId).notifier)
+                                .read(
+                                  queueControllerProvider(
+                                    widget.roomId,
+                                  ).notifier,
+                                )
                                 .reorderItem(
                                   itemId: itemId,
                                   newIndex: newIndex,
@@ -112,7 +200,7 @@ class RoomQueueSection extends ConsumerWidget {
   // ADD
   // ===================================================================
 
-  Future<void> _addTrack(BuildContext context, WidgetRef ref) async {
+  Future<void> _addTrack(BuildContext context) async {
     final track = await showTrackSearchDialog(context);
 
     if (track == null) {
@@ -121,7 +209,7 @@ class RoomQueueSection extends ConsumerWidget {
 
     try {
       await ref
-          .read(queueControllerProvider(roomId).notifier)
+          .read(queueControllerProvider(widget.roomId).notifier)
           .addItem(
             trackId: track.trackId,
             title: track.title,
@@ -141,17 +229,55 @@ class RoomQueueSection extends ConsumerWidget {
   }
 
   // ===================================================================
-  // REMOVE
+  // ADD FROM HISTORY
   // ===================================================================
 
-  Future<void> _removeTrack(
+  Future<void> _addHistoryTrack(
     BuildContext context,
-    WidgetRef ref,
-    String itemId,
+    RoomPlaybackHistoryItem item,
   ) async {
     try {
       await ref
-          .read(queueControllerProvider(roomId).notifier)
+          .read(queueControllerProvider(widget.roomId).notifier)
+          .addItem(
+            trackId: item.trackId,
+            title: item.title,
+            thumbnailUrl: item.thumbnailUrl,
+            durationMs: item.durationMs,
+            source: item.source,
+          );
+
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            duration: Duration(milliseconds: 1200),
+            content: Text('Added to queue.'),
+          ),
+        );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('Failed to add track: $error')));
+    }
+  }
+
+  // ===================================================================
+  // REMOVE
+  // ===================================================================
+
+  Future<void> _removeTrack(BuildContext context, String itemId) async {
+    try {
+      await ref
+          .read(queueControllerProvider(widget.roomId).notifier)
           .removeItem(itemId);
     } catch (error) {
       if (!context.mounted) {
@@ -177,6 +303,9 @@ class _QueueStatusHeader extends StatelessWidget {
     required this.items,
     required this.canManage,
     required this.onAddTrack,
+    required this.hasHistory,
+    required this.showHistory,
+    required this.onToggleHistory,
   });
 
   final AsyncValue<PlaybackState> playbackState;
@@ -186,6 +315,12 @@ class _QueueStatusHeader extends StatelessWidget {
   final bool canManage;
 
   final VoidCallback? onAddTrack;
+
+  final bool hasHistory;
+
+  final bool showHistory;
+
+  final VoidCallback? onToggleHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +383,7 @@ class _QueueStatusHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // =========================================================
-          // PLAYBACK + ADD
+          // PLAYBACK + ACTIONS
           // =========================================================
           Row(
             children: [
@@ -286,6 +421,9 @@ class _QueueStatusHeader extends StatelessWidget {
                 ),
               ),
 
+              // =====================================================
+              // ADD TRACK
+              // =====================================================
               if (canManage && onAddTrack != null) ...[
                 const SizedBox(width: 12),
 
@@ -293,6 +431,25 @@ class _QueueStatusHeader extends StatelessWidget {
                   onPressed: onAddTrack,
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Add track'),
+                ),
+              ],
+
+              // =====================================================
+              // HISTORY / BACK TO QUEUE
+              // =====================================================
+              if (hasHistory && onToggleHistory != null) ...[
+                const SizedBox(width: 6),
+
+                IconButton.filledTonal(
+                  tooltip: showHistory ? 'Back to queue' : 'Playback history',
+
+                  onPressed: onToggleHistory,
+
+                  icon: Icon(
+                    showHistory
+                        ? Icons.queue_music_rounded
+                        : Icons.history_rounded,
+                  ),
                 ),
               ],
             ],
