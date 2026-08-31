@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +6,7 @@ import '../../../library/application/saved_tracks_controller.dart';
 import '../../../library/domain/models/saved_track.dart';
 import '../../domain/models/track_search_result.dart';
 import '../controllers/track_search_controller.dart';
+import '../../data/providers/track_search_suggestions_repository_provider.dart';
 
 Future<TrackSearchResult?> showTrackSearchDialog(BuildContext context) {
   return showDialog<TrackSearchResult>(
@@ -26,6 +28,16 @@ class _TrackSearchDialog extends ConsumerStatefulWidget {
 
 class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
   final _searchController = TextEditingController();
+
+  final _searchFocusNode = FocusNode();
+
+  final _suggestionsMenuController = MenuController();
+
+  Timer? _suggestionsDebounce;
+
+  List<String> _suggestions = const [];
+
+  int _suggestionsRequestId = 0;
 
   final Set<String> _favoriteMutations = {};
 
@@ -54,9 +66,175 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
   @override
   void dispose() {
+    _suggestionsDebounce?.cancel();
+
+    _suggestionsRequestId++;
+
+    _searchFocusNode.dispose();
+
     _searchController.dispose();
 
     super.dispose();
+  }
+
+  // ===================================================================
+  // SEARCH SUGGESTIONS
+  // ===================================================================
+
+  void _onSearchChanged(String value) {
+    _suggestionsDebounce?.cancel();
+
+    _suggestionsDebounce = null;
+
+    final requestId = ++_suggestionsRequestId;
+
+    final query = value.trim();
+
+    // Старые подсказки больше
+    // не должны оставаться на экране.
+    _hideSuggestions();
+
+    if (_mode != _TrackPickerMode.search) {
+      return;
+    }
+
+    if (query.length < 2) {
+      return;
+    }
+
+    // Если вставили YouTube URL,
+    // autocomplete не нужен.
+    if (_looksLikeUrl(query)) {
+      return;
+    }
+
+    _suggestionsDebounce = Timer(const Duration(milliseconds: 300), () {
+      _loadSuggestions(query, requestId);
+    });
+  }
+
+  // ===================================================================
+  // LOAD SUGGESTIONS
+  // ===================================================================
+
+  Future<void> _loadSuggestions(String query, int requestId) async {
+    try {
+      final repository = ref.read(trackSearchSuggestionsRepositoryProvider);
+
+      final suggestions = await repository.suggest(query);
+
+      if (!mounted) {
+        return;
+      }
+
+      // ===============================================================
+      // STALE RESPONSE PROTECTION
+      // ===============================================================
+
+      if (requestId != _suggestionsRequestId) {
+        return;
+      }
+
+      if (_mode != _TrackPickerMode.search) {
+        return;
+      }
+
+      if (_searchController.text.trim() != query) {
+        return;
+      }
+
+      setState(() {
+        _suggestions = suggestions;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+
+        if (requestId != _suggestionsRequestId) {
+          return;
+        }
+
+        if (_suggestions.isEmpty || !_searchFocusNode.hasFocus) {
+          if (_suggestionsMenuController.isOpen) {
+            _suggestionsMenuController.close();
+          }
+
+          return;
+        }
+
+        if (!_suggestionsMenuController.isOpen) {
+          _suggestionsMenuController.open();
+        }
+      });
+    } catch (_) {
+      // Suggestions — вспомогательная фича.
+      //
+      // Ошибка здесь НЕ должна ломать
+      // основной поиск.
+
+      if (!mounted || requestId != _suggestionsRequestId) {
+        return;
+      }
+
+      _hideSuggestions();
+    }
+  }
+
+  // ===================================================================
+  // SELECT SUGGESTION
+  // ===================================================================
+
+  Future<void> _selectSuggestion(String suggestion) async {
+    _suggestionsDebounce?.cancel();
+
+    _suggestionsDebounce = null;
+
+    _suggestionsRequestId++;
+
+    _searchController.value = TextEditingValue(
+      text: suggestion,
+      selection: TextSelection.collapsed(offset: suggestion.length),
+    );
+
+    _hideSuggestions();
+
+    await _search();
+  }
+
+  // ===================================================================
+  // HIDE SUGGESTIONS
+  // ===================================================================
+
+  void _hideSuggestions() {
+    if (_suggestionsMenuController.isOpen) {
+      _suggestionsMenuController.close();
+    }
+
+    if (_suggestions.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _suggestions = const [];
+    });
+  }
+
+  // ===================================================================
+  // URL
+  // ===================================================================
+
+  bool _looksLikeUrl(String value) {
+    final lower = value.trim().toLowerCase();
+
+    return lower.startsWith('http://') ||
+        lower.startsWith('https://') ||
+        lower.startsWith('youtube.com/') ||
+        lower.startsWith('www.youtube.com/') ||
+        lower.startsWith('m.youtube.com/') ||
+        lower.startsWith('music.youtube.com/') ||
+        lower.startsWith('youtu.be/');
   }
 
   // ===================================================================
@@ -64,6 +242,14 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
   // ===================================================================
 
   Future<void> _search() async {
+    _suggestionsDebounce?.cancel();
+
+    _suggestionsDebounce = null;
+
+    _suggestionsRequestId++;
+
+    _hideSuggestions();
+
     final query = _searchController.text.trim();
 
     if (query.length < 2) {
@@ -72,7 +258,6 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
     await ref.read(trackSearchControllerProvider.notifier).search(query);
   }
-
   // ===================================================================
   // FAVORITE KEY
   // ===================================================================
@@ -205,9 +390,33 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
                     return;
                   }
 
+                  final nextMode = selection.first;
+
+                  _suggestionsDebounce?.cancel();
+
+                  _suggestionsDebounce = null;
+
+                  _suggestionsRequestId++;
+
+                  if (_suggestionsMenuController.isOpen) {
+                    _suggestionsMenuController.close();
+                  }
+
                   setState(() {
-                    _mode = selection.first;
+                    _mode = nextMode;
+
+                    _suggestions = const [];
                   });
+
+                  if (nextMode == _TrackPickerMode.search) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) {
+                        return;
+                      }
+
+                      _searchFocusNode.requestFocus();
+                    });
+                  }
                 },
               ),
             ),
@@ -221,18 +430,77 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      autofocus: true,
-                      textInputAction: TextInputAction.search,
-                      onSubmitted: (_) {
-                        _search();
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final fieldWidth = constraints.maxWidth;
+
+                        return MenuAnchor(
+                          controller: _suggestionsMenuController,
+
+                          crossAxisUnconstrained: false,
+
+                          consumeOutsideTap: false,
+
+                          style: MenuStyle(
+                            fixedSize: WidgetStatePropertyAll(
+                              Size.fromWidth(fieldWidth),
+                            ),
+
+                            maximumSize: WidgetStatePropertyAll(
+                              Size(fieldWidth, 320),
+                            ),
+                          ),
+
+                          menuChildren: [
+                            for (final suggestion in _suggestions)
+                              MenuItemButton(
+                                style: ButtonStyle(
+                                  minimumSize: WidgetStatePropertyAll(
+                                    Size(fieldWidth, 44),
+                                  ),
+                                  alignment: Alignment.centerLeft,
+                                ),
+
+                                leadingIcon: const Icon(
+                                  Icons.search_rounded,
+                                  size: 18,
+                                ),
+
+                                onPressed: () {
+                                  _selectSuggestion(suggestion);
+                                },
+
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: Text(
+                                    suggestion,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                          ],
+
+                          child: TextField(
+                            controller: _searchController,
+                            focusNode: _searchFocusNode,
+                            autofocus: true,
+                            textInputAction: TextInputAction.search,
+
+                            onChanged: _onSearchChanged,
+
+                            onSubmitted: (_) {
+                              _search();
+                            },
+
+                            decoration: const InputDecoration(
+                              labelText: 'Search tracks',
+                              hintText: 'Linkin Park Numb',
+                              prefixIcon: Icon(Icons.search_rounded),
+                            ),
+                          ),
+                        );
                       },
-                      decoration: const InputDecoration(
-                        labelText: 'Search tracks',
-                        hintText: 'Linkin Park Numb',
-                        prefixIcon: Icon(Icons.search_rounded),
-                      ),
                     ),
                   ),
 
