@@ -20,6 +20,13 @@ class PlaybackState {
 
   final DateTime? scheduledStartAt;
 
+  /// Server-side playback transition.
+  ///
+  /// null   = normal playback / seek / pause / resume
+  /// next   = preparing next queue track
+  /// repeat = preparing the same track again
+  final String? transitionKind;
+
   final String? updatedBy;
 
   const PlaybackState({
@@ -33,6 +40,7 @@ class PlaybackState {
     required this.positionMs,
     required this.updatedAt,
     required this.scheduledStartAt,
+    required this.transitionKind,
     required this.updatedBy,
   });
 
@@ -48,6 +56,7 @@ class PlaybackState {
       positionMs: 0,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       scheduledStartAt: null,
+      transitionKind: null,
       updatedBy: null,
     );
   }

@@ -38,14 +38,13 @@ class PlaybackController extends AsyncNotifier<PlaybackState> {
         state = AsyncData(playback);
       },
 
-      // Playback регулярно проверяем,
-      // но не надо каждые 45 секунд дёргать
       // PlaybackSynchronizer тем же snapshot.
       shouldApply: (current, fetched) {
         return current.updatedAt != fetched.updatedAt ||
             current.trackId != fetched.trackId ||
             current.isPlaying != fetched.isPlaying ||
             current.positionMs != fetched.positionMs ||
+            current.transitionKind != fetched.transitionKind ||
             current.scheduledStartAt != fetched.scheduledStartAt;
       },
     );

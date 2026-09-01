@@ -87,6 +87,8 @@ class SupabasePlaybackRepository implements PlaybackRepository {
 
       durationMs: (data['duration_ms'] as num?)?.toInt(),
 
+      transitionKind: data['transition_kind'] as String?,
+
       addedBy: data['added_by'] as String?,
 
       isPlaying: data['is_playing'] as bool? ?? false,

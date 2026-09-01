@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/models/room_action_request.dart';
 import '../controllers/action_request_controller.dart';
 import '../controllers/playback_controller.dart';
+import '../controllers/queue_controller.dart';
 import '../controllers/room_state.dart';
 import '../providers/playback_position_provider.dart';
 import 'room_player_card.dart';
@@ -24,6 +25,8 @@ class RoomPlayerSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final playbackState = ref.watch(playbackControllerProvider(roomId));
 
+    final queueState = ref.watch(queueControllerProvider(roomId));
+
     return playbackState.when(
       loading: () => const _PlaybackLoadingCard(),
 
@@ -40,8 +43,29 @@ class RoomPlayerSection extends ConsumerWidget {
             ref.watch(playbackPositionProvider(roomId)).value ??
             playback.positionMs;
 
+        // =====================================================
+        // NEXT TRACK
+        // =====================================================
+        //
+        // QueueController хранит очередь
+        // в фактическом порядке воспроизведения.
+        //
+        // Первый элемент очереди —
+        // следующий трек.
+        //
+        // Если очередь ещё загружается,
+        // упала с ошибкой или пуста —
+        // nextTrack будет null.
+        // =====================================================
+
+        final queueItems = queueState.value;
+
+        final nextTrack = queueItems?.firstOrNull;
+
         return RoomPlayerCard(
           playback: playback,
+
+          nextTrack: nextTrack,
 
           livePositionMs: livePositionMs,
 

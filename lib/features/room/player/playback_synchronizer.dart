@@ -295,6 +295,8 @@ class PlaybackSynchronizer {
           );
 
           await _engine.seek(remote.positionMs);
+
+          await _engine.pause();
         } else {
           debugPrint(
             '[Sync] Preparing without seek | '
@@ -386,17 +388,69 @@ class PlaybackSynchronizer {
 
     final lateBy = now.difference(scheduledStartAt).inMilliseconds;
 
-    debugPrint(
-      '[Sync] PLAY NOW | '
-      'lateBy=$lateBy ms',
-    );
+    // ===================================================
+    // AUTHORITATIVE START POSITION
+    // ===================================================
+    //
+    // Даже если YouTube успел проиграть часть muted preload,
+    // именно сервер решает, где трек должен находиться
+    // в момент scheduledStartAt.
+    // ===================================================
 
-    // Если почему-то подготовленный track исчез,
-    // быстро загружаем актуальную позицию.
+    final targetPosition = remote.positionAt(now);
+
+    // ===================================================
+    // LATE LOAD
+    // ===================================================
+
     if (_engine.currentState.trackId != trackId) {
-      await _engine.load(trackId, startPositionMs: remote.positionAt(now));
+      debugPrint(
+        '[Sync] '
+        'Scheduled start requires late load '
+        '@ $targetPosition ms',
+      );
+
+      await _engine.load(trackId, startPositionMs: targetPosition);
+
+      _trackLoadedAt = DateTime.now().toUtc();
     }
 
+    // ===================================================
+    // FINAL START ALIGNMENT
+    // ===================================================
+
+    final localBeforeStart = _engine.currentState;
+
+    final startDrift = localBeforeStart.positionMs - targetPosition;
+
+    debugPrint(
+      '[Sync] PLAY NOW | '
+      'lateBy=$lateBy ms | '
+      'target=$targetPosition ms | '
+      'local=${localBeforeStart.positionMs} ms | '
+      'startDrift='
+      '${startDrift >= 0 ? '+' : ''}'
+      '$startDrift ms',
+    );
+
+    // Во время preload один backend может успеть
+    // проиграть несколько секунд.
+    //
+    // Перед PLAY возвращаем его точно к серверной
+    // позиции.
+    if (startDrift.abs() > 250) {
+      debugPrint(
+        '[Sync] '
+        'Aligning scheduled start '
+        '${localBeforeStart.positionMs} '
+        '→ $targetPosition ms',
+      );
+
+      await _engine.seek(targetPosition);
+    }
+
+    // Только после выравнивания разрешаем звук
+    // и реальное воспроизведение.
     await _engine.play();
   }
 
