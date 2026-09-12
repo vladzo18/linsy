@@ -180,7 +180,7 @@ class RoomPlayerCard extends ConsumerWidget {
                 ),
 
               // NO CURRENT TRACK
-              if (!hasTrack && canControlPlayback)
+              if (!hasTrack)
                 Padding(
                   padding: EdgeInsets.fromLTRB(
                     compact ? 12 : 18,
@@ -188,7 +188,10 @@ class RoomPlayerCard extends ConsumerWidget {
                     compact ? 12 : 18,
                     compact ? 8 : 10,
                   ),
-                  child: StartQueueControls(compact: compact, onStart: onNext),
+                  child: StartQueueControls(
+                    compact: compact,
+                    onStart: effectiveNext,
+                  ),
                 ),
             ],
           ),

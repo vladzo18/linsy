@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../controllers/action_request_controller.dart';
 import '../controllers/room_state.dart';
-import '../providers/playback_position_provider.dart';
 
 import 'request_member_panel.dart';
 import 'request_incoming_panel.dart';
@@ -47,13 +46,10 @@ class RoomActionRequestsSection extends ConsumerWidget {
 
     // MEMBER
 
-    final livePositionMs =
-        ref.watch(playbackPositionProvider(roomId)).value ?? 0;
-
     return MemberRequestsPanel(
       roomId: roomId,
       requestsState: requestsState,
-      playbackPositionMs: livePositionMs,
+      currentUserId: currentUserId!,
     );
   }
 }

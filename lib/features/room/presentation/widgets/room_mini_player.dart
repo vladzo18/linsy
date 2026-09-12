@@ -1,9 +1,10 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linsy/features/profile/application/profile_store.dart';
 
 import '../../domain/models/room_action_request.dart';
-import '../controllers/action_request_controller.dart';
+import 'confirm_room_request.dart';
 import '../controllers/playback_controller.dart';
 import '../controllers/queue_controller.dart';
 import '../controllers/room_state.dart';
@@ -204,17 +205,14 @@ class RoomMiniPlayer extends ConsumerWidget {
                                   return;
                                 }
 
-                                await ref
-                                    .read(
-                                      actionRequestControllerProvider(
-                                        roomId,
-                                      ).notifier,
-                                    )
-                                    .createRequest(
-                                      action: playback.isPlaying
-                                          ? RoomAction.pause
-                                          : RoomAction.play,
-                                    );
+                                await confirmRoomRequest(
+                                  context,
+                                  ref,
+                                  roomId: roomId,
+                                  action: playback.isPlaying
+                                      ? RoomAction.pause
+                                      : RoomAction.play,
+                                );
                               },
                         icon: Icon(
                           playback.isPlaying
@@ -244,27 +242,22 @@ class RoomMiniPlayer extends ConsumerWidget {
                                         return;
                                       }
 
-                                      ScaffoldMessenger.of(context)
-                                        ..hideCurrentSnackBar()
-                                        ..showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Failed to play next track.',
-                                            ),
-                                          ),
-                                        );
+                                      AppNotice.show(
+                                        context,
+                                        'Failed to play next track.',
+                                        kind: NoticeKind.error,
+                                      );
                                     }
 
                                     return;
                                   }
 
-                                  await ref
-                                      .read(
-                                        actionRequestControllerProvider(
-                                          roomId,
-                                        ).notifier,
-                                      )
-                                      .createRequest(action: RoomAction.next);
+                                  await confirmRoomRequest(
+                                    context,
+                                    ref,
+                                    roomId: roomId,
+                                    action: RoomAction.next,
+                                  );
                                 },
                           icon: const Icon(Icons.skip_next_rounded),
                         ),

@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -369,15 +370,11 @@ class _RoomChatState extends ConsumerState<RoomChat>
                             return;
                           }
 
-                          ScaffoldMessenger.of(context)
-                            ..hideCurrentSnackBar()
-                            ..showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Failed to update reaction: $error',
-                                ),
-                              ),
-                            );
+                          AppNotice.show(
+                            context,
+                            'Failed to update reaction: $error',
+                            kind: NoticeKind.error,
+                          );
                         }
                       },
                     );

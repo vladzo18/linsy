@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linsy/features/profile/application/profile_store.dart';
@@ -163,16 +164,12 @@ class _ParticipantPill extends ConsumerWidget {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to change role: '
-              '$error',
-            ),
-          ),
-        );
+      AppNotice.show(
+        context,
+        'Failed to change role: '
+        '$error',
+        kind: NoticeKind.error,
+      );
     }
   }
 }

@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linsy/features/profile/application/profile_store.dart';
@@ -91,13 +92,9 @@ class _MemberTile extends ConsumerWidget {
       contentPadding: EdgeInsets.zero,
 
       leading: CircleAvatar(
-        backgroundImage: avatarUrl != null
-            ? NetworkImage(avatarUrl)
-            : null,
+        backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
 
-        child: avatarUrl == null
-            ? Text(_initial(displayName))
-            : null,
+        child: avatarUrl == null ? Text(_initial(displayName)) : null,
       ),
 
       title: Text(displayName),
@@ -151,16 +148,12 @@ class _MemberTile extends ConsumerWidget {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to change role: '
-              '$error',
-            ),
-          ),
-        );
+      AppNotice.show(
+        context,
+        'Failed to change role: '
+        '$error',
+        kind: NoticeKind.error,
+      );
     }
   }
 }

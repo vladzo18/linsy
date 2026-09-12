@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -385,9 +386,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   // ===================================================================
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppNotice.show(context, message, kind: NoticeKind.error);
   }
 
   // ===================================================================

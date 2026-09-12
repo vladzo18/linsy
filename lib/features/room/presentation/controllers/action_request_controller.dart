@@ -94,21 +94,17 @@ class ActionRequestController extends AsyncNotifier<List<RoomActionRequest>> {
     final user = ref.read(authControllerProvider).user;
 
     if (user == null) {
-      return;
+      throw StateError('Not authenticated.');
     }
 
-    try {
-      await ref
-          .read(actionRequestRepositoryProvider)
-          .createRequest(
-            roomId: roomId,
-            userId: user.id,
-            action: action,
-            payload: payload,
-          );
-    } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
-    }
+    await ref
+        .read(actionRequestRepositoryProvider)
+        .createRequest(
+          roomId: roomId,
+          userId: user.id,
+          action: action,
+          payload: payload,
+        );
   }
 
   // ============================================================
@@ -129,13 +125,9 @@ class ActionRequestController extends AsyncNotifier<List<RoomActionRequest>> {
   // ============================================================
 
   Future<void> cancelRequest(String requestId) async {
-    try {
-      await ref
-          .read(actionRequestRepositoryProvider)
-          .cancelRequest(requestId: requestId);
-    } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
-    }
+    await ref
+        .read(actionRequestRepositoryProvider)
+        .cancelRequest(requestId: requestId);
   }
 
   // ============================================================

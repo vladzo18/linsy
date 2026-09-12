@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -76,11 +77,11 @@ class _DraggableQueueState extends State<DraggableQueue> {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('Failed to reorder queue: $error')),
-        );
+      AppNotice.show(
+        context,
+        'Failed to reorder queue: $error',
+        kind: NoticeKind.error,
+      );
     } finally {
       if (mounted) {
         setState(() {

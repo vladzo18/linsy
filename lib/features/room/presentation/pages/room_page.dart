@@ -1,3 +1,5 @@
+import '../widgets/room_invite_hint.dart';
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -86,10 +88,16 @@ class RoomPage extends ConsumerWidget {
       // CONTENT
       // =============================================================
       body: ClipRect(
-        child: RoomContentLayout(
+        child: RoomInviteHint(
           roomId: roomId,
           roomState: roomState,
+          roomCode: roomCode,
           currentUserId: currentUser?.id,
+          child: RoomContentLayout(
+            roomId: roomId,
+            roomState: roomState,
+            currentUserId: currentUser?.id,
+          ),
         ),
       ),
     );
@@ -124,14 +132,7 @@ class _RoomCodeButtonState extends State<_RoomCodeButton> {
       _copied = true;
     });
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Room code copied'),
-          duration: Duration(milliseconds: 1200),
-        ),
-      );
+    AppNotice.show(context, 'Room code copied', kind: NoticeKind.success);
 
     await Future<void>.delayed(const Duration(milliseconds: 1200));
 

@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linsy/features/profile/application/profile_store.dart';
@@ -56,8 +57,18 @@ class IncomingRequestsPanel extends ConsumerWidget {
                 request: pending[index],
                 roomState: roomState,
 
-                onReject: () {
-                  controller.rejectRequest(pending[index].id);
+                onReject: () async {
+                  try {
+                    await controller.rejectRequest(pending[index].id);
+                  } catch (_) {
+                    if (context.mounted) {
+                      AppNotice.show(
+                        context,
+                        'Could not reject the request.',
+                        kind: NoticeKind.error,
+                      );
+                    }
+                  }
                 },
 
                 onApprove: () async {
@@ -74,9 +85,7 @@ class IncomingRequestsPanel extends ConsumerWidget {
                       message = 'Queue is empty.';
                     }
 
-                    ScaffoldMessenger.of(context)
-                      ..hideCurrentSnackBar()
-                      ..showSnackBar(SnackBar(content: Text(message)));
+                    AppNotice.show(context, message, kind: NoticeKind.error);
                   }
                 },
               ),

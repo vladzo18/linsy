@@ -1,3 +1,7 @@
+import 'package:linsy/core/feedback/app_dialog.dart';
+import '../../domain/models/room_action_request.dart';
+import 'confirm_room_request.dart';
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,6 +50,13 @@ class RoomQueueSection extends ConsumerStatefulWidget {
 
 class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
   bool _showHistory = false;
+  bool _confirmingRemoval = false;
+  bool get _canManage =>
+      widget.roomState.members
+          .where((member) => member.userId == widget.currentUserId)
+          .firstOrNull
+          ?.canControlPlayback ??
+      false;
 
   @override
   Widget build(BuildContext context) {
@@ -99,7 +110,7 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
             showingHistory: showHistory,
             historyCount: historyItems.length,
             onExpand: widget.onExpand!,
-            onAddTrack: canManage ? () => _addTrack(context) : null,
+            onAddTrack: () => _addTrack(context),
             onToggleHistory: hasHistory
                 ? () {
                     setState(() => _showHistory = !showHistory);
@@ -119,8 +130,8 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
               if (useExpandedMobileHeader)
                 ExpandedMobileQueueToolbar(
                   items: items,
-                  canManage: canManage,
-                  onAddTrack: canManage ? () => _addTrack(context) : null,
+                  canManage: true,
+                  onAddTrack: () => _addTrack(context),
                   hasHistory: hasHistory,
                   showHistory: showHistory,
                   onToggleHistory: hasHistory
@@ -135,8 +146,8 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
                 QueueStatusHeader(
                   playbackState: playbackState,
                   items: items,
-                  canManage: canManage,
-                  onAddTrack: canManage ? () => _addTrack(context) : null,
+                  canManage: true,
+                  onAddTrack: () => _addTrack(context),
                   hasHistory: hasHistory,
                   showHistory: showHistory,
                   onToggleHistory: hasHistory
@@ -195,7 +206,7 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
                 Expanded(
                   child: RoomPlaybackHistoryView(
                     items: historyItems,
-                    canManage: canManage,
+                    canManage: true,
                     allowContentScroll: widget.allowContentScroll,
                     onScrollHandoff: widget.onScrollHandoff,
                     onAddToQueue: (item) {
@@ -256,6 +267,24 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
       return;
     }
 
+    if (!context.mounted) return;
+    if (!_canManage) {
+      await confirmRoomRequest(
+        context,
+        ref,
+        roomId: widget.roomId,
+        action: RoomAction.addTrack,
+        payload: {
+          'track_id': track.trackId,
+          'title': track.title,
+          'thumbnail_url': track.thumbnailUrl,
+          'duration_ms': track.durationMs,
+          'source': track.source,
+        },
+      );
+      return;
+    }
+
     try {
       await ref
           .read(queueControllerProvider(widget.roomId).notifier)
@@ -266,14 +295,19 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
             durationMs: track.durationMs,
             source: track.source,
           );
+      if (context.mounted) {
+        AppNotice.show(context, 'Added to queue.', kind: NoticeKind.success);
+      }
     } catch (error) {
       if (!context.mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Failed to add track: $error')));
+      AppNotice.show(
+        context,
+        'Failed to add track: $error',
+        kind: NoticeKind.error,
+      );
     }
   }
 
@@ -283,6 +317,22 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
     BuildContext context,
     RoomPlaybackHistoryItem item,
   ) async {
+    if (!_canManage) {
+      await confirmRoomRequest(
+        context,
+        ref,
+        roomId: widget.roomId,
+        action: RoomAction.addTrack,
+        payload: {
+          'track_id': item.trackId,
+          'title': item.title,
+          'thumbnail_url': item.thumbnailUrl,
+          'duration_ms': item.durationMs,
+          'source': item.source,
+        },
+      );
+      return;
+    }
     try {
       await ref
           .read(queueControllerProvider(widget.roomId).notifier)
@@ -298,42 +348,63 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            duration: Duration(milliseconds: 1200),
-            content: Text('Added to queue.'),
-          ),
-        );
+      AppNotice.show(context, 'Added to queue.', kind: NoticeKind.success);
     } catch (error) {
       if (!context.mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Failed to add track: $error')));
+      AppNotice.show(
+        context,
+        'Failed to add track: $error',
+        kind: NoticeKind.error,
+      );
     }
   }
 
   // REMOVE
 
   Future<void> _removeTrack(BuildContext context, String itemId) async {
+    if (_confirmingRemoval || !_canManage) return;
+    _confirmingRemoval = true;
     try {
+      final item = ref
+          .read(queueControllerProvider(widget.roomId))
+          .value
+          ?.where((item) => item.id == itemId)
+          .firstOrNull;
+      if (item == null) return;
+      final confirmed = await AppDialog.confirm(
+        context,
+        title: 'Remove track?',
+        message: 'Remove “${item.title ?? item.trackId}” from the queue?',
+        confirmLabel: 'Remove',
+        destructive: true,
+        icon: Icons.delete_outline_rounded,
+      );
+      if (!confirmed || !context.mounted || !_canManage) return;
       await ref
           .read(queueControllerProvider(widget.roomId).notifier)
           .removeItem(itemId);
+      if (context.mounted) {
+        AppNotice.show(
+          context,
+          'Track removed from queue.',
+          kind: NoticeKind.success,
+        );
+      }
     } catch (error) {
       if (!context.mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('Failed to remove track: $error')),
-        );
+      AppNotice.show(
+        context,
+        'Failed to remove track: $error',
+        kind: NoticeKind.error,
+      );
+    } finally {
+      _confirmingRemoval = false;
     }
   }
 }

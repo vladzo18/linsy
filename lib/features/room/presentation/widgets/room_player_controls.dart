@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -207,11 +208,11 @@ class _SaveTrackButtonState extends ConsumerState<_SaveTrackButton> {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('Failed to update saved tracks: $error')),
-        );
+      AppNotice.show(
+        context,
+        'Failed to update saved tracks: $error',
+        kind: NoticeKind.error,
+      );
     } finally {
       if (mounted) {
         setState(() {

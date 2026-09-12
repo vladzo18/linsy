@@ -64,12 +64,6 @@ class _PlaybackTimelineState extends State<PlaybackTimeline> {
       return;
     }
 
-    final confirmed = await _showSeekRequestDialog(context, targetPosition);
-
-    if (confirmed != true || !mounted) {
-      return;
-    }
-
     await _runBusy(() => widget.onRequestSeek(targetPosition));
   }
 
@@ -99,58 +93,6 @@ class _PlaybackTimelineState extends State<PlaybackTimeline> {
 
   // ============================================================
   // MEMBER DIALOG
-  // ============================================================
-
-  Future<bool?> _showSeekRequestDialog(
-    BuildContext context,
-    int targetPositionMs,
-  ) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Request seek'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Send a request to change '
-                'the playback position?',
-              ),
-              const SizedBox(height: 16),
-              _TimeRow(
-                label: 'Current position',
-                value: _formatDuration(widget.positionMs),
-              ),
-              const SizedBox(height: 8),
-              _TimeRow(
-                label: 'Requested position',
-                value: _formatDuration(targetPositionMs),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
-              child: const Text('Send request'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // ============================================================
-  // BUILD
   // ============================================================
 
   @override
@@ -349,28 +291,6 @@ class _PlaybackTimelineState extends State<PlaybackTimeline> {
 
 // ============================================================
 // TIME ROW
-// ============================================================
-
-class _TimeRow extends StatelessWidget {
-  const _TimeRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: Text(label)),
-        const SizedBox(width: 16),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-}
-
-// ============================================================
-// FORMAT
 // ============================================================
 
 String _formatDuration(int milliseconds) {

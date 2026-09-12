@@ -1,3 +1,5 @@
+import 'package:linsy/core/feedback/app_dialog.dart';
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linsy/features/room/application/room_membership_service.dart';
@@ -73,32 +75,16 @@ class _RoomCardState extends ConsumerState<HomeRoomCard> {
 
     final room = widget.item.room;
 
-    final shouldDelete = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Delete room?'),
-          content: Text(
-            'Delete "${room.name}" permanently? '
-            'All participants will be disconnected.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
+    final shouldDelete = await AppDialog.confirm(
+      context,
+      title: 'Delete room?',
+      message:
+          'Delete "${room.name}" permanently? All participants will be disconnected.',
+      confirmLabel: 'Delete',
+      destructive: true,
+      icon: Icons.delete_outline_rounded,
     );
+    if (!mounted) return;
 
     if (shouldDelete != true) {
       return;
@@ -140,9 +126,7 @@ class _RoomCardState extends ConsumerState<HomeRoomCard> {
   // MESSAGE
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppNotice.show(context, message, kind: NoticeKind.error);
   }
 
   // BUILD

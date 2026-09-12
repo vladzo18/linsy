@@ -144,11 +144,10 @@ class YoutubePlayerEngine implements PlayerEngine {
 
   @override
   Future<void> setVolume(double volume) async {
+    // Cache immediately so autoplay cannot unmute with an old value while
+    // initialization is still pending. Apply the latest value once ready.
+    _volume = volume.clamp(0.0, 1.0).toDouble();
     await ready;
-
-    final normalized = volume.clamp(0.0, 1.0).toDouble();
-
-    _volume = normalized;
 
     final youtubeVolume = (_volume * 100).round();
 

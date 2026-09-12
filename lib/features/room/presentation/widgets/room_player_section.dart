@@ -1,8 +1,9 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/room_action_request.dart';
-import '../controllers/action_request_controller.dart';
+import 'confirm_room_request.dart';
 import '../controllers/playback_controller.dart';
 import '../controllers/queue_controller.dart';
 import '../controllers/room_state.dart';
@@ -94,9 +95,7 @@ class RoomPlayerSection extends ConsumerWidget {
                   ? 'Queue is empty.'
                   : 'Failed to play next track.';
 
-              ScaffoldMessenger.of(context)
-                ..hideCurrentSnackBar()
-                ..showSnackBar(SnackBar(content: Text(message)));
+              AppNotice.show(context, message, kind: NoticeKind.error);
             }
           },
 
@@ -109,27 +108,25 @@ class RoomPlayerSection extends ConsumerWidget {
           // =====================================================
           // MEMBER
           // =====================================================
-          onRequestPlayPause: () {
-            return ref
-                .read(actionRequestControllerProvider(roomId).notifier)
-                .createRequest(
-                  action: playback.isPlaying
-                      ? RoomAction.pause
-                      : RoomAction.play,
-                );
-          },
-
-          onRequestNext: () {
-            return ref
-                .read(actionRequestControllerProvider(roomId).notifier)
-                .createRequest(action: RoomAction.next);
-          },
-
-          onRequestSeek: (positionMs) {
-            return ref
-                .read(actionRequestControllerProvider(roomId).notifier)
-                .requestSeek(positionMs);
-          },
+          onRequestPlayPause: () => confirmRoomRequest(
+            context,
+            ref,
+            roomId: roomId,
+            action: playback.isPlaying ? RoomAction.pause : RoomAction.play,
+          ),
+          onRequestNext: () => confirmRoomRequest(
+            context,
+            ref,
+            roomId: roomId,
+            action: RoomAction.next,
+          ),
+          onRequestSeek: (positionMs) => confirmRoomRequest(
+            context,
+            ref,
+            roomId: roomId,
+            action: RoomAction.seek,
+            payload: {'position_ms': positionMs < 0 ? 0 : positionMs},
+          ),
         );
       },
     );

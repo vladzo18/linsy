@@ -1,8 +1,8 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/models/room_action_request.dart';
 import '../controllers/action_request_controller.dart';
-import 'track_search_dialog.dart';
 
 import 'request_visuals.dart';
 
@@ -11,14 +11,14 @@ class MemberRequestsPanel extends ConsumerWidget {
     super.key,
     required this.roomId,
     required this.requestsState,
-    required this.playbackPositionMs,
+    required this.currentUserId,
   });
 
   final String roomId;
 
   final AsyncValue<List<RoomActionRequest>> requestsState;
 
-  final int playbackPositionMs;
+  final String currentUserId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,7 +29,9 @@ class MemberRequestsPanel extends ConsumerWidget {
     final pending =
         requestsState.value
             ?.where(
-              (request) => request.status == RoomActionRequestStatus.pending,
+              (request) =>
+                  request.userId == currentUserId &&
+                  request.status == RoomActionRequestStatus.pending,
             )
             .toList() ??
         const <RoomActionRequest>[];
@@ -37,22 +39,6 @@ class MemberRequestsPanel extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // CREATE REQUEST
-        _RequestActions(
-          onPlay: () {
-            controller.createRequest(action: RoomAction.play);
-          },
-          onPause: () {
-            controller.createRequest(action: RoomAction.pause);
-          },
-          onSeek: () {
-            controller.requestSeek(playbackPositionMs + 10000);
-          },
-          onTrack: () => _requestTrack(context, controller),
-        ),
-
-        const SizedBox(height: 18),
-
         // OWN PENDING
         if (requestsState.isLoading)
           const Padding(
@@ -63,7 +49,7 @@ class MemberRequestsPanel extends ConsumerWidget {
           const EmptyRequests(
             title: 'No pending requests',
             subtitle:
-                'Requests you send will appear here until they are resolved.',
+                'Use the player or Add track to send a request. Pending requests appear here.',
           )
         else
           Column(
@@ -71,8 +57,18 @@ class MemberRequestsPanel extends ConsumerWidget {
               for (var index = 0; index < pending.length; index++) ...[
                 _OwnRequestCard(
                   request: pending[index],
-                  onCancel: () {
-                    controller.cancelRequest(pending[index].id);
+                  onCancel: () async {
+                    try {
+                      await controller.cancelRequest(pending[index].id);
+                    } catch (_) {
+                      if (context.mounted) {
+                        AppNotice.show(
+                          context,
+                          'Could not cancel the request.',
+                          kind: NoticeKind.error,
+                        );
+                      }
+                    }
                   },
                 ),
 
@@ -81,99 +77,6 @@ class MemberRequestsPanel extends ConsumerWidget {
             ],
           ),
       ],
-    );
-  }
-
-  Future<void> _requestTrack(
-    BuildContext context,
-    ActionRequestController controller,
-  ) async {
-    final track = await showTrackSearchDialog(context);
-
-    if (track == null) {
-      return;
-    }
-
-    await controller.createRequest(
-      action: RoomAction.addTrack,
-      payload: {
-        'track_id': track.trackId,
-        'title': track.title,
-        'thumbnail_url': track.thumbnailUrl,
-        'duration_ms': track.durationMs,
-        'source': track.source,
-      },
-    );
-  }
-}
-
-// MEMBER ACTIONS
-
-class _RequestActions extends StatelessWidget {
-  const _RequestActions({
-    required this.onPlay,
-    required this.onPause,
-    required this.onSeek,
-    required this.onTrack,
-  });
-
-  final VoidCallback onPlay;
-  final VoidCallback onPause;
-  final VoidCallback onSeek;
-  final VoidCallback onTrack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _RequestActionButton(
-          icon: Icons.play_arrow_rounded,
-          label: 'Play',
-          onPressed: onPlay,
-        ),
-
-        _RequestActionButton(
-          icon: Icons.pause_rounded,
-          label: 'Pause',
-          onPressed: onPause,
-        ),
-
-        _RequestActionButton(
-          icon: Icons.forward_10_rounded,
-          label: '+10s',
-          onPressed: onSeek,
-        ),
-
-        _RequestActionButton(
-          icon: Icons.add_to_queue_rounded,
-          label: 'Track',
-          onPressed: onTrack,
-        ),
-      ],
-    );
-  }
-}
-
-class _RequestActionButton extends StatelessWidget {
-  const _RequestActionButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton.tonalIcon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 19),
-      label: Text(label),
     );
   }
 }

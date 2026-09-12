@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -106,9 +107,11 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Failed to save theme: $error')));
+      AppNotice.show(
+        context,
+        'Failed to save theme: $error',
+        kind: NoticeKind.error,
+      );
     } finally {
       if (mounted) {
         setState(() {

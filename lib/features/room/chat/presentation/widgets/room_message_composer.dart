@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -173,11 +174,11 @@ class _RoomMessageComposerState extends State<RoomMessageComposer> {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('Failed to send message: $error')),
-        );
+      AppNotice.show(
+        context,
+        'Failed to send message: $error',
+        kind: NoticeKind.error,
+      );
     } finally {
       if (mounted) {
         setState(() {

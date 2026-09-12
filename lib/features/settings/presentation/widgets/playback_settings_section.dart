@@ -1,3 +1,4 @@
+import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -89,15 +90,11 @@ class PlaybackSettingsSection extends ConsumerWidget {
                         return;
                       }
 
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Failed to save playback settings: $error',
-                            ),
-                          ),
-                        );
+                      AppNotice.show(
+                        context,
+                        'Failed to save playback settings: $error',
+                        kind: NoticeKind.error,
+                      );
                     }
                   },
                 ),
