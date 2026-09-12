@@ -8,6 +8,8 @@ import '../../domain/models/track_search_result.dart';
 import '../controllers/track_search_controller.dart';
 import '../../data/providers/track_search_suggestions_repository_provider.dart';
 
+import 'track_picker_tile.dart';
+
 Future<TrackSearchResult?> showTrackSearchDialog(BuildContext context) {
   return showDialog<TrackSearchResult>(
     context: context,
@@ -43,9 +45,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
   _TrackPickerMode _mode = _TrackPickerMode.search;
 
-  // ===================================================================
   // INIT
-  // ===================================================================
 
   @override
   void initState() {
@@ -60,9 +60,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     });
   }
 
-  // ===================================================================
   // DISPOSE
-  // ===================================================================
 
   @override
   void dispose() {
@@ -77,9 +75,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     super.dispose();
   }
 
-  // ===================================================================
   // SEARCH SUGGESTIONS
-  // ===================================================================
 
   void _onSearchChanged(String value) {
     _suggestionsDebounce?.cancel();
@@ -113,9 +109,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     });
   }
 
-  // ===================================================================
   // LOAD SUGGESTIONS
-  // ===================================================================
 
   Future<void> _loadSuggestions(String query, int requestId) async {
     try {
@@ -127,9 +121,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
         return;
       }
 
-      // ===============================================================
       // STALE RESPONSE PROTECTION
-      // ===============================================================
 
       if (requestId != _suggestionsRequestId) {
         return;
@@ -182,9 +174,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     }
   }
 
-  // ===================================================================
   // SELECT SUGGESTION
-  // ===================================================================
 
   Future<void> _selectSuggestion(String suggestion) async {
     _suggestionsDebounce?.cancel();
@@ -203,9 +193,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     await _search();
   }
 
-  // ===================================================================
   // HIDE SUGGESTIONS
-  // ===================================================================
 
   void _hideSuggestions() {
     if (_suggestionsMenuController.isOpen) {
@@ -221,9 +209,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     });
   }
 
-  // ===================================================================
   // URL
-  // ===================================================================
 
   bool _looksLikeUrl(String value) {
     final lower = value.trim().toLowerCase();
@@ -237,9 +223,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
         lower.startsWith('youtu.be/');
   }
 
-  // ===================================================================
   // SEARCH
-  // ===================================================================
 
   Future<void> _search() async {
     _suggestionsDebounce?.cancel();
@@ -258,17 +242,13 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
     await ref.read(trackSearchControllerProvider.notifier).search(query);
   }
-  // ===================================================================
   // FAVORITE KEY
-  // ===================================================================
 
   String _favoriteKey({required String source, required String trackId}) {
     return '$source:$trackId';
   }
 
-  // ===================================================================
   // TOGGLE FAVORITE
-  // ===================================================================
 
   Future<void> _toggleFavorite(TrackSearchResult track) async {
     final key = _favoriteKey(source: track.source, trackId: track.trackId);
@@ -328,9 +308,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     }
   }
 
-  // ===================================================================
   // SAVED → SEARCH RESULT
-  // ===================================================================
 
   TrackSearchResult _fromSavedTrack(SavedTrack track) {
     return TrackSearchResult(
@@ -343,9 +321,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     );
   }
 
-  // ===================================================================
   // BUILD
-  // ===================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -357,16 +333,35 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
     final savedKeys = savedTracks.map((track) => track.key).toSet();
 
+    final mediaQuery = MediaQuery.of(context);
+
+    final isCompact = mediaQuery.size.width < 700;
+
+    final availableHeight =
+        mediaQuery.size.height -
+        mediaQuery.viewInsets.bottom -
+        mediaQuery.padding.top -
+        mediaQuery.padding.bottom;
+
+    // AlertDialog has its own title/actions. The content must shrink when the
+    // real on-screen keyboard opens, otherwise a fixed 520 px body can overflow
+    // on phones even though it looks fine in the emulator.
+    final contentHeight = (availableHeight - (isCompact ? 150 : 180))
+        .clamp(180.0, 520.0)
+        .toDouble();
+
     return AlertDialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 16 : 40,
+        vertical: isCompact ? 16 : 24,
+      ),
       title: const Text('Add track'),
       content: SizedBox(
         width: 600,
-        height: 520,
+        height: contentHeight,
         child: Column(
           children: [
-            // =====================================================
             // MODE
-            // =====================================================
             SizedBox(
               width: double.infinity,
               child: SegmentedButton<_TrackPickerMode>(
@@ -423,9 +418,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
             const SizedBox(height: 16),
 
-            // =====================================================
             // SEARCH INPUT
-            // =====================================================
             if (_mode == _TrackPickerMode.search) ...[
               Row(
                 children: [
@@ -517,9 +510,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
               const SizedBox(height: 16),
             ],
 
-            // =====================================================
             // CONTENT
-            // =====================================================
             Expanded(
               child: _mode == _TrackPickerMode.search
                   ? _buildSearchResults(
@@ -543,9 +534,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     );
   }
 
-  // ===================================================================
   // SEARCH RESULTS
-  // ===================================================================
 
   Widget _buildSearchResults(
     AsyncValue<List<TrackSearchResult>> searchState,
@@ -579,7 +568,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
             final mutating = _favoriteMutations.contains(key);
 
-            return _TrackTile(
+            return TrackPickerTile(
               title: track.title,
               subtitle: track.channelTitle,
               thumbnailUrl: track.thumbnailUrl,
@@ -600,9 +589,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
     );
   }
 
-  // ===================================================================
   // SAVED
-  // ===================================================================
 
   Widget _buildSavedTracks(AsyncValue<List<SavedTrack>> state) {
     return state.when(
@@ -677,7 +664,7 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
             final mutating = _favoriteMutations.contains(key);
 
-            return _TrackTile(
+            return TrackPickerTile(
               title: savedTrack.title,
               subtitle: savedTrack.channelTitle,
               thumbnailUrl: savedTrack.thumbnailUrl,
@@ -697,142 +684,4 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
       },
     );
   }
-}
-
-// =====================================================================
-// TRACK TILE
-// =====================================================================
-
-class _TrackTile extends StatelessWidget {
-  const _TrackTile({
-    required this.title,
-    required this.subtitle,
-    required this.thumbnailUrl,
-    required this.durationMs,
-    required this.saved,
-    required this.favoriteEnabled,
-    required this.favoriteBusy,
-    required this.onFavorite,
-    required this.onTap,
-  });
-
-  final String title;
-
-  final String subtitle;
-
-  final String? thumbnailUrl;
-
-  final int? durationMs;
-
-  final bool saved;
-
-  final bool favoriteEnabled;
-
-  final bool favoriteBusy;
-
-  final VoidCallback onFavorite;
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 6),
-
-      leading: _Thumbnail(url: thumbnailUrl),
-
-      title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
-
-      subtitle: Row(
-        children: [
-          Expanded(
-            child: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-
-          if (durationMs != null) Text(_formatDuration(durationMs!)),
-        ],
-      ),
-
-      trailing: favoriteBusy
-          ? const SizedBox(
-              width: 40,
-              height: 40,
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          : IconButton(
-              tooltip: saved ? 'Remove from saved' : 'Save track',
-              onPressed: favoriteEnabled ? onFavorite : null,
-              icon: Icon(
-                saved ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-              ),
-            ),
-
-      onTap: onTap,
-    );
-  }
-}
-
-// =====================================================================
-// THUMBNAIL
-// =====================================================================
-
-class _Thumbnail extends StatelessWidget {
-  const _Thumbnail({required this.url});
-
-  final String? url;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: SizedBox(
-        width: 96,
-        height: 54,
-        child: url == null || url!.isEmpty
-            ? const ColoredBox(
-                color: Colors.black12,
-                child: Icon(Icons.music_note),
-              )
-            : Image.network(
-                url!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const ColoredBox(
-                    color: Colors.black12,
-                    child: Icon(Icons.music_note),
-                  );
-                },
-              ),
-      ),
-    );
-  }
-}
-
-// =====================================================================
-// DURATION
-// =====================================================================
-
-String _formatDuration(int milliseconds) {
-  final totalSeconds = milliseconds ~/ 1000;
-
-  final hours = totalSeconds ~/ 3600;
-
-  final minutes = (totalSeconds % 3600) ~/ 60;
-
-  final seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return '$hours:'
-        '${minutes.toString().padLeft(2, '0')}:'
-        '${seconds.toString().padLeft(2, '0')}';
-  }
-
-  return '$minutes:'
-      '${seconds.toString().padLeft(2, '0')}';
 }

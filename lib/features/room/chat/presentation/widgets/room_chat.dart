@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:linsy/features/room/presentation/widgets/room_panel_scroll_physics.dart';
 
 import '../../../../auth/domain/models/app_user.dart';
 import '../../../../auth/presentation/controllers/auth_controller.dart';
@@ -18,15 +19,16 @@ class RoomChat extends ConsumerStatefulWidget {
     required this.roomId,
     this.height,
     this.embedded = false,
+    this.onScrollHandoff,
+    this.allowContentScroll = true,
     super.key,
   });
 
   final String roomId;
   final double? height;
-
-  /// When true, the chat is rendered as tab content:
-  /// no outer Card and no duplicate "Chat" header.
   final bool embedded;
+  final RoomPanelScrollHandoff? onScrollHandoff;
+  final bool allowContentScroll;
 
   @override
   ConsumerState<RoomChat> createState() => _RoomChatState();
@@ -36,9 +38,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
     with AutomaticKeepAliveClientMixin<RoomChat> {
   final ScrollController _scrollController = ScrollController();
 
-  // ===================================================
   // PROFILE CACHE
-  // ===================================================
   //
   // Храним последний известный актуальный профиль.
   //
@@ -46,7 +46,6 @@ class _RoomChatState extends ConsumerState<RoomChat>
   // RoomState больше его не содержит, но чат
   // продолжает использовать последнее известное
   // имя и аватар.
-  // ===================================================
 
   final Map<String, AppUser> _profileCache = {};
 
@@ -58,9 +57,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
   @override
   bool get wantKeepAlive => true;
 
-  // ===================================================
   // INIT
-  // ===================================================
 
   @override
   void initState() {
@@ -69,9 +66,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
     _scrollController.addListener(_handleScroll);
   }
 
-  // ===================================================
   // DISPOSE
-  // ===================================================
 
   @override
   void dispose() {
@@ -82,9 +77,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
     super.dispose();
   }
 
-  // ===================================================
   // REPLY
-  // ===================================================
 
   void _startReply(RoomMessage message) {
     setState(() {
@@ -98,9 +91,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
     });
   }
 
-  // ===================================================
   // AUTO SCROLL
-  // ===================================================
 
   bool get _isNearBottom {
     if (!_scrollController.hasClients) {
@@ -136,9 +127,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
     });
   }
 
-  // ===================================================
   // PAGINATION
-  // ===================================================
 
   void _handleScroll() {
     if (!_scrollController.hasClients || _loadingOlder || !_hasMoreOlder) {
@@ -196,9 +185,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
     }
   }
 
-  // ===================================================
   // SEND
-  // ===================================================
 
   Future<void> _sendMessage(String message) async {
     final reply = _replyingTo;
@@ -218,9 +205,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
     }
   }
 
-  // ===================================================
   // BUILD
-  // ===================================================
 
   @override
   Widget build(BuildContext context) {
@@ -234,9 +219,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
 
     final reactions = reactionState.value ?? const <RoomMessageReaction>[];
 
-    // =================================================
     // CURRENT USER
-    // =================================================
 
     final currentUser = ref.watch(authControllerProvider).user;
 
@@ -253,9 +236,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
       _profileCache[currentUser.id] = currentUser;
     }
 
-    // =================================================
     // REACTIONS BY MESSAGE
-    // =================================================
 
     final reactionsByMessage = <String, List<RoomMessageReaction>>{};
 
@@ -265,9 +246,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
           .add(reaction);
     }
 
-    // =================================================
     // NEW MESSAGES AUTO SCROLL
-    // =================================================
 
     ref.listen(roomChatControllerProvider(widget.roomId), (previous, next) {
       final previousCount = previous?.value?.length ?? 0;
@@ -285,17 +264,13 @@ class _RoomChatState extends ConsumerState<RoomChat>
       }
     });
 
-    // =================================================
     // CONTENT
-    // =================================================
 
     final content = SizedBox(
       height: widget.height,
       child: Column(
         children: [
-          // =============================================
           // HEADER
-          // =============================================
           if (!widget.embedded) ...[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -318,19 +293,13 @@ class _RoomChatState extends ConsumerState<RoomChat>
             const Divider(height: 1),
           ],
 
-          // =============================================
           // MESSAGES
-          // =============================================
           Expanded(
             child: chatState.when(
-              // =========================================
               // LOADING
-              // =========================================
               loading: () => const Center(child: CircularProgressIndicator()),
 
-              // =========================================
               // ERROR
-              // =========================================
               error: (error, stackTrace) => _ChatError(
                 error: error,
                 onRetry: () {
@@ -338,17 +307,31 @@ class _RoomChatState extends ConsumerState<RoomChat>
                 },
               ),
 
-              // =========================================
               // DATA
-              // =========================================
               data: (messages) {
                 if (messages.isEmpty) {
-                  return const _EmptyChat();
+                  return CustomScrollView(
+                    controller: _scrollController,
+                    physics: roomPanelScrollPhysics(
+                      onHandoff: widget.onScrollHandoff,
+                      allowContentScroll: widget.allowContentScroll,
+                    ),
+                    slivers: const [
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyChat(),
+                      ),
+                    ],
+                  );
                 }
 
                 return ListView.builder(
                   key: PageStorageKey<String>('chat-${widget.roomId}'),
                   controller: _scrollController,
+                  physics: roomPanelScrollPhysics(
+                    onHandoff: widget.onScrollHandoff,
+                    allowContentScroll: widget.allowContentScroll,
+                  ),
                   padding: const EdgeInsets.all(12),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
@@ -363,17 +346,12 @@ class _RoomChatState extends ConsumerState<RoomChat>
 
                       reactions: reactionsByMessage[message.id] ?? const [],
 
-                
-                      // ===============================
                       // REPLY
-                      // ===============================
                       onReply: () {
                         _startReply(message);
                       },
 
-                      // ===============================
                       // REACTION
-                      // ===============================
                       onToggleReaction: (reaction) async {
                         try {
                           await ref
@@ -411,9 +389,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
 
           const Divider(height: 1),
 
-          // =============================================
           // COMPOSER
-          // =============================================
           Padding(
             padding: const EdgeInsets.all(12),
             child: RoomMessageComposer(
@@ -426,17 +402,13 @@ class _RoomChatState extends ConsumerState<RoomChat>
       ),
     );
 
-    // =================================================
     // EMBEDDED
-    // =================================================
 
     if (widget.embedded) {
       return content;
     }
 
-    // =================================================
     // STANDALONE CARD
-    // =================================================
 
     return Card(
       margin: EdgeInsets.zero,
@@ -446,9 +418,7 @@ class _RoomChatState extends ConsumerState<RoomChat>
   }
 }
 
-// =====================================================================
 // EMPTY
-// =====================================================================
 
 class _EmptyChat extends StatelessWidget {
   const _EmptyChat();
@@ -487,9 +457,7 @@ class _EmptyChat extends StatelessWidget {
   }
 }
 
-// =====================================================================
 // ERROR
-// =====================================================================
 
 class _ChatError extends StatelessWidget {
   const _ChatError({required this.error, required this.onRetry});

@@ -4,11 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'ui_sound.dart';
 
 class UiSoundService {
-  final Map<
-    UiSound,
-    Future<AudioPool>
-  >
-  _pools = {};
+  final Map<UiSound, Future<AudioPool>> _pools = {};
 
   bool _enabled = true;
 
@@ -24,72 +20,41 @@ class UiSoundService {
   // SETTINGS
   // ===================================================================
 
-  void setEnabled(
-    bool enabled,
-  ) {
+  void setEnabled(bool enabled) {
     _enabled = enabled;
   }
 
-  void setVolume(
-    double volume,
-  ) {
-    _volume = volume
-        .clamp(
-          0.0,
-          1.0,
-        )
-        .toDouble();
+  void setVolume(double volume) {
+    _volume = volume.clamp(0.0, 1.0).toDouble();
   }
 
   // ===================================================================
   // PLAY
   // ===================================================================
 
-  Future<void> play(
-    UiSound sound, {
-    double? volume,
-  }) async {
-    if (_disposed ||
-        !_enabled) {
+  Future<void> play(UiSound sound, {double? volume}) async {
+    if (_disposed || !_enabled) {
       return;
     }
 
     try {
-      final pool =
-          await _getPool(
-        sound,
-      );
+      final pool = await _getPool(sound);
 
       if (_disposed) {
         return;
       }
 
-      final effectiveVolume =
-          (volume ?? _volume)
-              .clamp(
-                0.0,
-                1.0,
-              )
-              .toDouble();
+      final effectiveVolume = (volume ?? _volume).clamp(0.0, 1.0).toDouble();
 
-      await pool.start(
-        volume:
-            effectiveVolume,
-      );
-    } catch (
-      error,
-      stackTrace
-    ) {
+      await pool.start(volume: effectiveVolume);
+    } catch (error, stackTrace) {
       // UI sound никогда не должен ломать приложение.
       debugPrint(
         'Failed to play UI sound '
         '${sound.name}: $error',
       );
 
-      debugPrintStack(
-        stackTrace:
-            stackTrace,
-      );
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
@@ -97,27 +62,25 @@ class UiSoundService {
   // POOL
   // ===================================================================
 
-  Future<AudioPool> _getPool(
-    UiSound sound,
-  ) {
-    return _pools.putIfAbsent(
-      sound,
-      () {
-        return AudioPool.createFromAsset(
-          path:
-              sound.assetPath,
+  Future<AudioPool> _getPool(UiSound sound) {
+    return _pools.putIfAbsent(sound, () {
+      return AudioPool.create(
+        source: AssetSource(sound.assetPath),
+        // UI effects mix with the player instead of taking its audio focus.
+        audioContext: AudioContext(
+          android: const AudioContextAndroid(
+            audioFocus: AndroidAudioFocus.none,
+          ),
+        ),
 
-          // Несколько быстрых сообщений подряд
-          // могут звучать одновременно.
-          maxPlayers:
-              3,
+        // Несколько быстрых сообщений подряд
+        // могут звучать одновременно.
+        maxPlayers: 3,
 
-          // Один player готов заранее.
-          minPlayers:
-              1,
-        );
-      },
-    );
+        // Один player готов заранее.
+        minPlayers: 1,
+      );
+    });
   }
 
   // ===================================================================
@@ -131,16 +94,13 @@ class UiSoundService {
 
     _disposed = true;
 
-    final pools =
-        _pools.values.toList();
+    final pools = _pools.values.toList();
 
     _pools.clear();
 
-    for (final futurePool
-        in pools) {
+    for (final futurePool in pools) {
       try {
-        final pool =
-            await futurePool;
+        final pool = await futurePool;
 
         await pool.dispose();
       } catch (_) {

@@ -5,6 +5,7 @@ import 'package:linsy/features/profile/application/profile_store.dart';
 import '../../data/providers/room_repository_provider.dart';
 import '../../domain/models/room_member.dart';
 import '../controllers/room_state.dart';
+import 'horizontal_scroll_fade.dart';
 
 class RoomParticipantsBar extends ConsumerWidget {
   const RoomParticipantsBar({
@@ -39,20 +40,22 @@ class RoomParticipantsBar extends ConsumerWidget {
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
         height: 64,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          itemCount: roomState.members.length,
-          separatorBuilder: (context, index) => const SizedBox(width: 8),
-          itemBuilder: (context, index) {
-            final member = roomState.members[index];
+        child: HorizontalScrollFade(
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            itemCount: roomState.members.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final member = roomState.members[index];
 
-            return _ParticipantPill(
-              roomId: roomId,
-              member: member,
-              canManageRole: canManageRoles && !member.isHost,
-            );
-          },
+              return _ParticipantPill(
+                roomId: roomId,
+                member: member,
+                canManageRole: canManageRoles && !member.isHost,
+              );
+            },
+          ),
         ),
       ),
     );
@@ -91,12 +94,8 @@ class _ParticipantPill extends ConsumerWidget {
         children: [
           CircleAvatar(
             radius: 17,
-            backgroundImage: avatarUrl != null
-                ? NetworkImage(avatarUrl)
-                : null,
-            child: avatarUrl == null
-                ? Text(_initial(displayName))
-                : null,
+            backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+            child: avatarUrl == null ? Text(_initial(displayName)) : null,
           ),
 
           const SizedBox(width: 8),
