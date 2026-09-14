@@ -87,6 +87,7 @@ class RoomMembershipService {
     required String userId,
   }) async {
     await _repository.leaveRoom(roomId: roomId, userId: userId);
+    _roomExitTokenService.clear(roomId: roomId);
 
     try {
       await _exitRegistration.clear();

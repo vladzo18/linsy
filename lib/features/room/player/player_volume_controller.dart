@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/platform/system_media_volume.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,6 +17,7 @@ class PlayerVolumeController extends Notifier<double> {
 
   @override
   double build() {
+    if (usesSystemMediaVolume) return 1.0;
     // ===============================================================
     // DEFAULT VOLUME
     //
@@ -65,6 +67,7 @@ class PlayerVolumeController extends Notifier<double> {
   // ===================================================================
 
   Future<void> setVolume(double volume) async {
+    if (usesSystemMediaVolume) return;
     final normalized = volume.clamp(0.0, 1.0).toDouble();
 
     // После ручного изменения default volume

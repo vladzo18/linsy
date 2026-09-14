@@ -1,3 +1,4 @@
+import '../../../../core/platform/system_media_volume.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linsy/features/settings/presentation/wingets/profile_settings_section.dart';
@@ -42,9 +43,10 @@ class SettingsPage extends ConsumerWidget {
 
                         const SizedBox(height: 24),
 
-                        const PlaybackSettingsSection(),
-
-                        const SizedBox(height: 24),
+                        if (!usesSystemMediaVolume) ...[
+                          const PlaybackSettingsSection(),
+                          const SizedBox(height: 24),
+                        ],
 
                         const UiSoundSettingsSection(),
                       ]

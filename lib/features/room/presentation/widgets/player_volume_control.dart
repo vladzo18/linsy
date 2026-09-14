@@ -1,3 +1,4 @@
+import '../../../../core/platform/system_media_volume.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +9,27 @@ class PlayerVolumeControl extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (usesSystemMediaVolume) {
+      final volume = ref.watch(systemMediaVolumeProvider).value;
+      final label = volume == null
+          ? 'System media volume'
+          : volume == 0
+          ? 'Media sound off'
+          : 'Media volume ${(volume * 100).round()}%';
+      return Tooltip(
+        message: label,
+        child: Semantics(
+          label: label,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(
+              volume == null ? Icons.volume_mute_rounded : _volumeIcon(volume),
+            ),
+          ),
+        ),
+      );
+    }
     final volume = ref.watch(playerVolumeProvider);
 
     return MenuAnchor(

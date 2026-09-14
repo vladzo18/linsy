@@ -4,6 +4,12 @@ import 'package:linsy/core/feedback/app_dialog.dart';
 import 'package:linsy/core/feedback/app_notice.dart';
 import '../controllers/room_state.dart';
 
+/// Owned by the room session so replacing its UI for PiP cannot reset the hint.
+class RoomInviteSession {
+  bool shown = false;
+  bool? eligibleOnEntry;
+}
+
 class RoomInviteHint extends StatefulWidget {
   const RoomInviteHint({
     required this.roomId,
@@ -11,6 +17,7 @@ class RoomInviteHint extends StatefulWidget {
     required this.roomCode,
     required this.currentUserId,
     required this.child,
+    this.session,
     super.key,
   });
   final String roomId;
@@ -18,27 +25,34 @@ class RoomInviteHint extends StatefulWidget {
   final String? roomCode;
   final String? currentUserId;
   final Widget child;
+  final RoomInviteSession? session;
   @override
   State<RoomInviteHint> createState() => _RoomInviteHintState();
 }
 
 class _RoomInviteHintState extends State<RoomInviteHint> {
-  bool _inviteShown = false;
-  bool? _eligibleOnEntry;
+  RoomInviteSession _fallback = RoomInviteSession();
+  RoomInviteSession get _session => widget.session ?? _fallback;
+  bool get _inviteShown => _session.shown;
+  set _inviteShown(bool value) => _session.shown = value;
+  bool? get _eligibleOnEntry => _session.eligibleOnEntry;
+  set _eligibleOnEntry(bool? value) => _session.eligibleOnEntry = value;
   String get roomId => widget.roomId;
 
   @override
   void didUpdateWidget(covariant RoomInviteHint oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.roomId != roomId) {
-      _inviteShown = false;
-      _eligibleOnEntry = null;
+      _fallback = RoomInviteSession();
     }
   }
 
   void _offerInvite(RoomState roomState, String? code, String? userId) {
-    if (_inviteShown || roomState.status != RoomStatus.ready || userId == null)
+    if (_inviteShown ||
+        roomState.status != RoomStatus.ready ||
+        userId == null) {
       return;
+    }
     final self = roomState.members
         .where((member) => member.userId == userId)
         .firstOrNull;

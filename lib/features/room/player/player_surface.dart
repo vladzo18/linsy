@@ -26,6 +26,7 @@ class PlayerSurface extends ConsumerWidget {
 
     if (engine is YoutubePlayerEngine) {
       return FutureBuilder<void>(
+        key: GlobalObjectKey(engine),
         future: engine.ready,
         builder: (context, snapshot) {
           if (snapshot.hasError) {

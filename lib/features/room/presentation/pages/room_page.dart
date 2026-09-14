@@ -1,3 +1,9 @@
+import '../../player/room_playback_notification.dart';
+import '../../application/room_heartbeat.dart';
+import 'dart:async';
+import '../../player/room_pip.dart';
+import '../../player/player_surface.dart';
+import '../controllers/playback_controller.dart';
 import '../widgets/room_invite_hint.dart';
 import 'package:linsy/core/feedback/app_notice.dart';
 import 'package:flutter/material.dart';
@@ -13,13 +19,27 @@ import '../controllers/room_controller.dart';
 import '../controllers/room_state.dart';
 import '../widgets/room_content_layout.dart';
 
-class RoomPage extends ConsumerWidget {
+class RoomPage extends ConsumerStatefulWidget {
   const RoomPage({required this.roomId, super.key});
 
   final String roomId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RoomPage> createState() => _RoomPageState();
+}
+
+class _RoomPageState extends ConsumerState<RoomPage> {
+  RoomInviteSession _inviteSession = RoomInviteSession();
+  String get roomId => widget.roomId;
+
+  @override
+  void didUpdateWidget(covariant RoomPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.roomId != roomId) _inviteSession = RoomInviteSession();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final roomState = ref.watch(roomControllerProvider(roomId));
 
     final roomNameState = ref.watch(roomNameProvider(roomId));
@@ -28,7 +48,28 @@ class RoomPage extends ConsumerWidget {
 
     final currentUser = ref.watch(authControllerProvider).user;
 
+    ref.watch(roomPlaybackNotificationProvider(roomId));
+    ref.watch(roomHeartbeatProvider(roomId));
     ref.watch(playbackSynchronizerProvider(roomId));
+    final pip = ref.watch(roomPipProvider);
+    final playback = ref.watch(playbackControllerProvider(roomId)).value;
+    final pipController = ref.read(roomPipProvider.notifier);
+    final routeVisible = ModalRoute.of(context)?.isCurrent ?? true;
+    final pipEnabled =
+        routeVisible &&
+        playback?.trackId != null &&
+        playback?.isPlaying == true &&
+        roomState.status != RoomStatus.leaving;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) unawaited(pipController.configure(pipEnabled));
+    });
+
+    if (pip) {
+      return ColoredBox(
+        color: Colors.black,
+        child: Center(child: PlayerSurface(trackId: playback?.trackId)),
+      );
+    }
 
     final roomName = roomNameState.value ?? 'Room';
 
@@ -89,6 +130,7 @@ class RoomPage extends ConsumerWidget {
       // =============================================================
       body: ClipRect(
         child: RoomInviteHint(
+          session: _inviteSession,
           roomId: roomId,
           roomState: roomState,
           roomCode: roomCode,

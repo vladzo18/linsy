@@ -104,7 +104,8 @@ class YoutubePlayerEngine implements PlayerEngine {
     if (playerState != _lastPlayerState) {
       debugPrint(
         '[YoutubePlayer] '
-        'state: $playerState',
+        'state: $playerState wantPlaying=$_wantPlaying '
+        'volume=$_volume at=${DateTime.now().toIso8601String()}',
       );
     }
 
