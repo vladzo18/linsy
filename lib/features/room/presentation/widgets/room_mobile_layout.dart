@@ -1,3 +1,4 @@
+import '../../live_reactions/room_live_reactions_layer.dart';
 import 'package:flutter/material.dart';
 import '../controllers/room_state.dart';
 import 'room_player_section.dart';
@@ -31,8 +32,6 @@ class _MobileRoomLayoutState extends State<MobileRoomLayout> {
 
   double _panelFraction = _collapsedFraction;
 
-  bool _dragging = false;
-
   // Stable visual state. It changes only after a drag/snap finishes.
   // This prevents the mini-player/header from flickering while dragging.
   bool _panelExpandedState = false;
@@ -65,7 +64,7 @@ class _MobileRoomLayoutState extends State<MobileRoomLayout> {
 
       setState(() {
         _contentHandoffActive = true;
-        _dragging = true;
+
         _panelFraction = next;
       });
 
@@ -110,7 +109,7 @@ class _MobileRoomLayoutState extends State<MobileRoomLayout> {
 
     setState(() {
       _contentHandoffActive = false;
-      _dragging = false;
+
       _panelFraction = target;
       _panelExpandedState = target == _expandedFraction;
     });
@@ -119,9 +118,7 @@ class _MobileRoomLayoutState extends State<MobileRoomLayout> {
   // PANEL
 
   void _handleDragStart(DragStartDetails details) {
-    setState(() {
-      _dragging = true;
-    });
+    setState(() {});
   }
 
   void _handleDragUpdate(DragUpdateDetails details, double availableHeight) {
@@ -158,7 +155,6 @@ class _MobileRoomLayoutState extends State<MobileRoomLayout> {
     }
 
     setState(() {
-      _dragging = false;
       _panelFraction = target;
       _panelExpandedState = target == _expandedFraction;
     });
@@ -168,7 +164,6 @@ class _MobileRoomLayoutState extends State<MobileRoomLayout> {
     final target = _panelExpandedState ? _collapsedFraction : _expandedFraction;
 
     setState(() {
-      _dragging = false;
       _contentHandoffActive = false;
       _panelFraction = target;
       _panelExpandedState = target == _expandedFraction;
@@ -178,158 +173,85 @@ class _MobileRoomLayoutState extends State<MobileRoomLayout> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxHeight;
-
-        final keyboardVisible = View.of(context).viewInsets.bottom > 0;
-
-        final playerHeight = (height * 0.43).clamp(280.0, 370.0).toDouble();
-
-        // While the keyboard is open, the work panel temporarily takes the
-        // whole room area. This keeps Chat/Search usable on real phones and
-        // prevents the player from consuming half of the remaining viewport.
-        // The stored panel state is not changed, so closing the keyboard
-        // returns the user to the previous collapsed/expanded state.
-        final effectivePanelFraction = keyboardVisible
-            ? _expandedFraction
-            : _panelFraction;
-
-        final effectivePanelExpanded = keyboardVisible || _panelExpandedState;
-
-        final panelHeight = height * effectivePanelFraction;
-
-        // MINI PLAYER PROGRESS
-        //
-        // 0.64 -> invisible
-        // 1.00 -> fully visible
-
-        final showMiniPlayer = effectivePanelExpanded;
-
-        final expansionProgress =
-            ((effectivePanelFraction - _collapsedFraction) /
-                    (_expandedFraction - _collapsedFraction))
-                .clamp(0.0, 1.0)
-                .toDouble();
-
-        // Scroll permission and visual expanded state remain stable during
-        // a handoff gesture. This lets one continuous drag collapse the panel.
-        final allowContentScroll = effectivePanelExpanded;
-        final isPanelExpanded = effectivePanelExpanded;
-
-        return Stack(
-          fit: StackFit.expand,
+        final keyboard = View.of(context).viewInsets.bottom > 0;
+        final videoHeight = (constraints.maxWidth * 9 / 16).clamp(160.0, 270.0);
+        final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        final fullHeight = videoHeight + 110 * textScale.clamp(1.0, 2.0);
+        // Reserve space for the handle, tabs and useful panel content, not just
+        // the player. The participants strip and both gaps also consume height.
+        final minimumPanelHeight = 300 * textScale.clamp(1.0, 1.4);
+        final expanded =
+            keyboard ||
+            _panelExpandedState ||
+            _panelFraction > 0.7 ||
+            constraints.maxHeight < fullHeight + 62 + 16 + minimumPanelHeight;
+        final compactHeight = 100 * textScale.clamp(1.0, 1.5);
+        final playerHeight = expanded ? compactHeight : fullHeight;
+        final showVideo = constraints.maxHeight >= playerHeight + 100;
+        final panelHeight =
+            constraints.maxHeight -
+            (showVideo ? playerHeight + 8 + (expanded ? 0 : 70) : 74);
+        return Column(
           children: [
-            // NORMAL MOBILE ROOM
-            Column(
-              children: [
-                SizedBox(
-                  height: playerHeight,
-                  child: RoomPlayerSection(
-                    roomId: widget.roomId,
-                    roomState: widget.roomState,
-                    currentUserId: widget.currentUserId,
-                  ),
+            if (showVideo)
+              SizedBox(
+                height: playerHeight,
+                child: RoomPlayerSection(
+                  compactHeader: expanded,
+                  roomId: widget.roomId,
+                  roomState: widget.roomState,
+                  currentUserId: widget.currentUserId,
                 ),
-
-                const SizedBox(height: 6),
-
-                RoomSocialBar(
+              )
+            else
+              SizedBox(
+                height: 66,
+                child: RoomMiniPlayer(
+                  roomId: widget.roomId,
+                  roomState: widget.roomState,
+                  currentUserId: widget.currentUserId,
+                ),
+              ),
+            const SizedBox(height: 8),
+            if (showVideo && !expanded) ...[
+              SizedBox(
+                height: 62,
+                child: RoomSocialBar(
                   roomId: widget.roomId,
                   roomState: widget.roomState,
                   currentUserId: widget.currentUserId,
                   compact: true,
                 ),
-
-                const Expanded(child: SizedBox.shrink()),
-              ],
-            ),
-
-            // BACKGROUND DIM
-            if (effectivePanelFraction > _collapsedFraction)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: ColoredBox(
-                    color: Colors.black.withValues(
-                      alpha: expansionProgress * 0.12,
-                    ),
-                  ),
-                ),
               ),
-
-            // SHEET
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: AnimatedContainer(
-                duration: _dragging
-                    ? Duration.zero
-                    : const Duration(milliseconds: 280),
-                curve: Curves.easeOutCubic,
-                width: double.infinity,
-                height: panelHeight,
-                decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(18),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.10),
-                      blurRadius: 20,
-                      offset: const Offset(0, -5),
-                    ),
-                  ],
+              const SizedBox(height: 8),
+            ],
+            Expanded(
+              child: Material(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(18),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
-                    // GRABBER
+                    if (!showVideo)
+                      const Text(
+                        'Video hidden · Playback paused on this device',
+                        style: TextStyle(fontSize: 11),
+                      ),
                     RoomPanelHandle(
-                      expanded: effectivePanelExpanded,
-                      keyboardVisible: keyboardVisible,
-                      onTap: keyboardVisible
+                      expanded: expanded,
+                      keyboardVisible: keyboard,
+                      onTap: keyboard
                           ? () => FocusScope.of(context).unfocus()
                           : _togglePanel,
                       onDragStart: _handleDragStart,
                       onDragUpdate: (details) =>
-                          _handleDragUpdate(details, height),
+                          _handleDragUpdate(details, constraints.maxHeight),
                       onDragEnd: _handleDragEnd,
                     ),
-                    // MINI PLAYER
-                    //
-                    // Высота и opacity растут вместе с sheet,
-                    // поэтому он не появляется резким скачком.
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOutCubic,
-                      child: SizedBox(
-                        height: showMiniPlayer ? 66 : 0,
-                        child: ClipRect(
-                          child: AnimatedOpacity(
-                            opacity: showMiniPlayer ? 1 : 0,
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeOut,
-                            child: RoomMiniPlayer(
-                              roomId: widget.roomId,
-                              roomState: widget.roomState,
-                              currentUserId: widget.currentUserId,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      height: showMiniPlayer ? 1 : 0,
-                      color: colorScheme.outlineVariant.withValues(
-                        alpha: showMiniPlayer ? 0.55 : 0,
-                      ),
-                    ),
-
-                    // CHAT / QUEUE / REQUESTS
                     Expanded(
                       child: NotificationListener<ScrollEndNotification>(
                         onNotification: (notification) {
@@ -338,50 +260,42 @@ class _MobileRoomLayoutState extends State<MobileRoomLayout> {
                               notification.dragDetails?.primaryVelocity ?? 0,
                             );
                           }
-
                           return false;
                         },
                         child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-
-                          // While collapsed, the panel owns the vertical drag.
-                          // While expanded, the inner scrollable owns it and
-                          // hands the gesture back when it reaches the top.
-                          onVerticalDragStart: allowContentScroll
+                          onVerticalDragStart: expanded
                               ? null
                               : _handleDragStart,
-
-                          onVerticalDragUpdate: allowContentScroll
+                          onVerticalDragUpdate: expanded
                               ? null
-                              : (details) {
-                                  _handleDragUpdate(details, height);
+                              : (details) => _handleDragUpdate(
+                                  details,
+                                  constraints.maxHeight,
+                                ),
+                          onVerticalDragEnd: expanded ? null : _handleDragEnd,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              RoomWorkPanel(
+                                roomId: widget.roomId,
+                                roomState: widget.roomState,
+                                currentUserId: widget.currentUserId,
+                                embedded: true,
+                                isPanelExpanded: expanded,
+                                allowContentScroll: expanded,
+                                onExpand: () {
+                                  if (!_panelExpandedState) _togglePanel();
                                 },
-
-                          onVerticalDragEnd: allowContentScroll
-                              ? null
-                              : _handleDragEnd,
-
-                          child: RoomWorkPanel(
-                            roomId: widget.roomId,
-                            roomState: widget.roomState,
-                            currentUserId: widget.currentUserId,
-                            embedded: true,
-                            isPanelExpanded: isPanelExpanded,
-                            onExpand: () {
-                              if (!_panelExpandedState) _togglePanel();
-                            },
-                            allowContentScroll: allowContentScroll,
-
-                            onScrollHandoff: (dragDelta, metrics) {
-                              if (View.of(context).viewInsets.bottom > 0) {
-                                return false;
-                              }
-                              return _handleContentScrollHandoff(
-                                dragDelta,
-                                metrics,
-                                height,
-                              );
-                            },
+                                onScrollHandoff: (delta, metrics) => keyboard
+                                    ? false
+                                    : _handleContentScrollHandoff(
+                                        delta,
+                                        metrics,
+                                        panelHeight,
+                                      ),
+                              ),
+                              RoomLiveReactionsLayer(roomId: widget.roomId),
+                            ],
                           ),
                         ),
                       ),

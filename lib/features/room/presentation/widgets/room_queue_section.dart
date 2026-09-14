@@ -1,3 +1,6 @@
+import '../../../../core/widgets/animated_content_swap.dart';
+import '../controllers/action_request_controller.dart';
+import '../../domain/models/track_search_result.dart';
 import 'package:linsy/core/feedback/app_dialog.dart';
 import '../../domain/models/room_action_request.dart';
 import 'confirm_room_request.dart';
@@ -50,6 +53,7 @@ class RoomQueueSection extends ConsumerStatefulWidget {
 
 class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
   bool _showHistory = false;
+  bool _addingTrack = false;
   bool _confirmingRemoval = false;
   bool get _canManage =>
       widget.roomState.members
@@ -59,7 +63,14 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
       false;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedContentSwap(
+    child: KeyedSubtree(
+      key: ValueKey(_addingTrack),
+      child: _buildContent(context),
+    ),
+  );
+
+  Widget _buildContent(BuildContext context) {
     if (widget.roomState.status != RoomStatus.ready ||
         widget.currentUserId == null) {
       return const SizedBox.shrink();
@@ -71,6 +82,20 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
 
     if (currentMember == null) {
       return const SizedBox.shrink();
+    }
+
+    if (_addingTrack) {
+      return TrackSearchPanel(
+        confirmRequest: !_canManage,
+        onClose: () {
+          FocusManager.instance.primaryFocus?.unfocus();
+          setState(() => _addingTrack = false);
+        },
+        onSelected: (track) {
+          setState(() => _addingTrack = false);
+          unawaited(_submitTrack(context, track));
+        },
+      );
     }
 
     final queueState = ref.watch(queueControllerProvider(widget.roomId));
@@ -260,28 +285,46 @@ class _RoomQueueSectionState extends ConsumerState<RoomQueueSection> {
 
   // ADD
 
-  Future<void> _addTrack(BuildContext context) async {
-    final track = await showTrackSearchDialog(context);
+  void _addTrack(BuildContext context) {
+    setState(() => _addingTrack = true);
+    widget.onExpand?.call();
+  }
 
-    if (track == null) {
-      return;
-    }
-
+  Future<void> _submitTrack(
+    BuildContext context,
+    TrackSearchResult track,
+  ) async {
     if (!context.mounted) return;
     if (!_canManage) {
-      await confirmRoomRequest(
-        context,
-        ref,
-        roomId: widget.roomId,
-        action: RoomAction.addTrack,
-        payload: {
-          'track_id': track.trackId,
-          'title': track.title,
-          'thumbnail_url': track.thumbnailUrl,
-          'duration_ms': track.durationMs,
-          'source': track.source,
-        },
-      );
+      try {
+        await ref
+            .read(actionRequestControllerProvider(widget.roomId).notifier)
+            .createRequest(
+              action: RoomAction.addTrack,
+              payload: {
+                'track_id': track.trackId,
+                'title': track.title,
+                'thumbnail_url': track.thumbnailUrl,
+                'duration_ms': track.durationMs,
+                'source': track.source,
+              },
+            );
+        if (context.mounted) {
+          AppNotice.show(
+            context,
+            'Request sent to the host and moderators.',
+            kind: NoticeKind.success,
+          );
+        }
+      } catch (_) {
+        if (context.mounted) {
+          AppNotice.show(
+            context,
+            'Could not send the request. Please try again.',
+            kind: NoticeKind.error,
+          );
+        }
+      }
       return;
     }
 

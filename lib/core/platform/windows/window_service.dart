@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../../media/player_visibility.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
@@ -15,6 +16,25 @@ class PlatformWindowService with WindowListener implements WindowService {
   final WindowCloseHandler _onCloseRequested;
 
   bool _closing = false;
+  VoidCallback? _releaseMinimized;
+
+  @override
+  void onWindowMinimize() {
+    _releaseMinimized ??= playerVisibility.block();
+  }
+
+  @override
+  void onWindowRestore() {
+    _releaseMinimized?.call();
+    _releaseMinimized = null;
+  }
+
+  @override
+  void onWindowFocus() {
+    // A focused window cannot still be minimized. Some restore paths deliver
+    // focus without the restore event; release only our own blocker.
+    onWindowRestore();
+  }
 
   @override
   Future<void> initialize() async {

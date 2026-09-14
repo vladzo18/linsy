@@ -51,7 +51,6 @@ class RoomContentLayout extends StatelessWidget {
                       ),
 
                 // LIVE REACTIONS
-                RoomLiveReactionsLayer(roomId: roomId),
               ],
             ),
           ),
@@ -119,10 +118,16 @@ class _DesktopRoomLayout extends StatelessWidget {
             // CHAT / QUEUE / REQUESTS
             Expanded(
               flex: rightFlex,
-              child: RoomWorkPanel(
-                roomId: roomId,
-                roomState: roomState,
-                currentUserId: currentUserId,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  RoomWorkPanel(
+                    roomId: roomId,
+                    roomState: roomState,
+                    currentUserId: currentUserId,
+                  ),
+                  RoomLiveReactionsLayer(roomId: roomId),
+                ],
               ),
             ),
           ],

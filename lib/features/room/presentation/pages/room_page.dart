@@ -1,3 +1,4 @@
+import '../../../../core/feedback/feedback_region.dart';
 import '../../player/room_playback_notification.dart';
 import '../../application/room_heartbeat.dart';
 import 'dart:async';
@@ -81,48 +82,53 @@ class _RoomPageState extends ConsumerState<RoomPage> {
       // =============================================================
       // APP BAR
       // =============================================================
-      appBar: AppBar(
-        title: Text(roomName, maxLines: 1, overflow: TextOverflow.ellipsis),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: FeedbackRegion(
+          child: AppBar(
+            title: Text(roomName, maxLines: 1, overflow: TextOverflow.ellipsis),
 
-        actions: [
-          // =========================================================
-          // ROOM CODE
-          // =========================================================
-          if (roomCode != null && roomCode.isNotEmpty)
-            _RoomCodeButton(roomCode: roomCode, compact: compact),
+            actions: [
+              // =========================================================
+              // ROOM CODE
+              // =========================================================
+              if (roomCode != null && roomCode.isNotEmpty)
+                _RoomCodeButton(roomCode: roomCode, compact: compact),
 
-          // =========================================================
-          // SETTINGS
-          // =========================================================
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (context) => const SettingsPage(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.settings_outlined),
+              // =========================================================
+              // SETTINGS
+              // =========================================================
+              IconButton(
+                tooltip: 'Settings',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => const SettingsPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings_outlined),
+              ),
+
+              // =========================================================
+              // LEAVE
+              // =========================================================
+              IconButton(
+                tooltip: 'Leave room',
+                onPressed: roomState.status == RoomStatus.leaving
+                    ? null
+                    : () {
+                        ref
+                            .read(roomControllerProvider(roomId).notifier)
+                            .leaveRoom();
+                      },
+                icon: const Icon(Icons.exit_to_app_rounded),
+              ),
+
+              const SizedBox(width: 8),
+            ],
           ),
-
-          // =========================================================
-          // LEAVE
-          // =========================================================
-          IconButton(
-            tooltip: 'Leave room',
-            onPressed: roomState.status == RoomStatus.leaving
-                ? null
-                : () {
-                    ref
-                        .read(roomControllerProvider(roomId).notifier)
-                        .leaveRoom();
-                  },
-            icon: const Icon(Icons.exit_to_app_rounded),
-          ),
-
-          const SizedBox(width: 8),
-        ],
+        ),
       ),
 
       // =============================================================

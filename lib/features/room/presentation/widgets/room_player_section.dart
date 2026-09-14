@@ -16,9 +16,11 @@ class RoomPlayerSection extends ConsumerWidget {
     required this.roomState,
     required this.currentUserId,
     super.key,
+    this.compactHeader = false,
   });
 
   final String roomId;
+  final bool compactHeader;
   final RoomState roomState;
   final String? currentUserId;
 
@@ -64,6 +66,7 @@ class RoomPlayerSection extends ConsumerWidget {
         final nextTrack = queueItems?.firstOrNull;
 
         return RoomPlayerCard(
+          compactHeader: compactHeader,
           playback: playback,
 
           nextTrack: nextTrack,

@@ -11,30 +11,37 @@ import '../../data/providers/track_search_suggestions_repository_provider.dart';
 
 import 'track_picker_tile.dart';
 
-Future<TrackSearchResult?> showTrackSearchDialog(BuildContext context) {
-  return showDialog<TrackSearchResult>(
-    context: context,
-    builder: (context) {
-      return const _TrackSearchDialog();
-    },
-  );
-}
-
 enum _TrackPickerMode { search, saved }
 
-class _TrackSearchDialog extends ConsumerStatefulWidget {
-  const _TrackSearchDialog();
+class TrackSearchPanel extends ConsumerStatefulWidget {
+  const TrackSearchPanel({
+    required this.onSelected,
+    required this.onClose,
+    this.confirmRequest = false,
+    super.key,
+  });
+  final ValueChanged<TrackSearchResult> onSelected;
+  final VoidCallback onClose;
+  final bool confirmRequest;
 
   @override
-  ConsumerState<_TrackSearchDialog> createState() => _TrackSearchDialogState();
+  ConsumerState<TrackSearchPanel> createState() => TrackSearchPanelState();
 }
 
-class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
+class TrackSearchPanelState extends ConsumerState<TrackSearchPanel> {
+  TrackSearchResult? _pendingTrack;
+
+  void _selectTrack(TrackSearchResult track) {
+    if (widget.confirmRequest) {
+      setState(() => _pendingTrack = track);
+    } else {
+      widget.onSelected(track);
+    }
+  }
+
   final _searchController = TextEditingController();
 
   final _searchFocusNode = FocusNode();
-
-  final _suggestionsMenuController = MenuController();
 
   Timer? _suggestionsDebounce;
 
@@ -139,28 +146,6 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
       setState(() {
         _suggestions = suggestions;
       });
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-
-        if (requestId != _suggestionsRequestId) {
-          return;
-        }
-
-        if (_suggestions.isEmpty || !_searchFocusNode.hasFocus) {
-          if (_suggestionsMenuController.isOpen) {
-            _suggestionsMenuController.close();
-          }
-
-          return;
-        }
-
-        if (!_suggestionsMenuController.isOpen) {
-          _suggestionsMenuController.open();
-        }
-      });
     } catch (_) {
       // Suggestions — вспомогательная фича.
       //
@@ -197,10 +182,6 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
   // HIDE SUGGESTIONS
 
   void _hideSuggestions() {
-    if (_suggestionsMenuController.isOpen) {
-      _suggestionsMenuController.close();
-    }
-
     if (_suggestions.isEmpty) {
       return;
     }
@@ -322,6 +303,39 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final pending = _pendingTrack;
+    if (pending != null) {
+      return Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.queue_music_rounded, size: 32),
+              const SizedBox(height: 12),
+              Text(
+                'Ask to add “${pending.title}” to the queue?',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                children: [
+                  TextButton(
+                    onPressed: () => setState(() => _pendingTrack = null),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => widget.onSelected(pending),
+                    child: const Text('Send request'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final searchState = ref.watch(trackSearchControllerProvider);
 
     final savedState = ref.watch(savedTracksControllerProvider);
@@ -330,204 +344,132 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
 
     final savedKeys = savedTracks.map((track) => track.key).toSet();
 
-    final mediaQuery = MediaQuery.of(context);
-
-    final isCompact = mediaQuery.size.width < 700;
-
-    final availableHeight =
-        mediaQuery.size.height -
-        mediaQuery.viewInsets.bottom -
-        mediaQuery.padding.top -
-        mediaQuery.padding.bottom;
-
-    // AlertDialog has its own title/actions. The content must shrink when the
-    // real on-screen keyboard opens, otherwise a fixed 520 px body can overflow
-    // on phones even though it looks fine in the emulator.
-    final contentHeight = (availableHeight - (isCompact ? 150 : 180))
-        .clamp(180.0, 520.0)
-        .toDouble();
-
-    return AlertDialog(
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: isCompact ? 16 : 40,
-        vertical: isCompact ? 16 : 24,
-      ),
-      title: const Text('Add track'),
-      content: SizedBox(
-        width: 600,
-        height: contentHeight,
-        child: Column(
-          children: [
-            // MODE
-            SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<_TrackPickerMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: _TrackPickerMode.search,
-                    icon: Icon(Icons.search_rounded),
-                    label: Text('Search'),
-                  ),
-
-                  ButtonSegment(
-                    value: _TrackPickerMode.saved,
-                    icon: Icon(Icons.favorite_rounded),
-                    label: Text('Saved'),
-                  ),
-                ],
-                selected: {_mode},
-                showSelectedIcon: false,
-                onSelectionChanged: (selection) {
-                  if (selection.isEmpty) {
-                    return;
-                  }
-
-                  final nextMode = selection.first;
-
-                  _suggestionsDebounce?.cancel();
-
-                  _suggestionsDebounce = null;
-
-                  _suggestionsRequestId++;
-
-                  if (_suggestionsMenuController.isOpen) {
-                    _suggestionsMenuController.close();
-                  }
-
-                  setState(() {
-                    _mode = nextMode;
-
-                    _suggestions = const [];
-                  });
-
-                  if (nextMode == _TrackPickerMode.search) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) {
-                        return;
-                      }
-
-                      _searchFocusNode.requestFocus();
-                    });
-                  }
-                },
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Back to queue',
+                onPressed: widget.onClose,
+                icon: const Icon(Icons.arrow_back_rounded),
               ),
+              const Expanded(child: Text('Add track')),
+            ],
+          ),
+          // MODE
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<_TrackPickerMode>(
+              segments: const [
+                ButtonSegment(
+                  value: _TrackPickerMode.search,
+                  icon: Icon(Icons.search_rounded),
+                  label: Text('Search'),
+                ),
+
+                ButtonSegment(
+                  value: _TrackPickerMode.saved,
+                  icon: Icon(Icons.favorite_rounded),
+                  label: Text('Saved'),
+                ),
+              ],
+              selected: {_mode},
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) {
+                if (selection.isEmpty) {
+                  return;
+                }
+
+                final nextMode = selection.first;
+
+                _suggestionsDebounce?.cancel();
+
+                _suggestionsDebounce = null;
+
+                _suggestionsRequestId++;
+
+                setState(() {
+                  _mode = nextMode;
+
+                  _suggestions = const [];
+                });
+
+                if (nextMode == _TrackPickerMode.search) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) {
+                      return;
+                    }
+
+                    _searchFocusNode.requestFocus();
+                  });
+                }
+              },
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // SEARCH INPUT
+          if (_mode == _TrackPickerMode.search) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    autofocus: true,
+                    textInputAction: TextInputAction.search,
+
+                    onChanged: _onSearchChanged,
+
+                    onSubmitted: (_) {
+                      _search();
+                    },
+
+                    decoration: const InputDecoration(
+                      labelText: 'Search tracks',
+                      hintText: 'Linkin Park Numb',
+                      prefixIcon: Icon(Icons.search_rounded),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                IconButton.filled(
+                  tooltip: 'Search',
+                  onPressed: _search,
+                  icon: const Icon(Icons.search_rounded),
+                ),
+              ],
             ),
 
             const SizedBox(height: 16),
-
-            // SEARCH INPUT
-            if (_mode == _TrackPickerMode.search) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final fieldWidth = constraints.maxWidth;
-
-                        return MenuAnchor(
-                          controller: _suggestionsMenuController,
-
-                          crossAxisUnconstrained: false,
-
-                          consumeOutsideTap: false,
-
-                          style: MenuStyle(
-                            fixedSize: WidgetStatePropertyAll(
-                              Size.fromWidth(fieldWidth),
-                            ),
-
-                            maximumSize: WidgetStatePropertyAll(
-                              Size(fieldWidth, 320),
-                            ),
-                          ),
-
-                          menuChildren: [
-                            for (final suggestion in _suggestions)
-                              MenuItemButton(
-                                style: ButtonStyle(
-                                  minimumSize: WidgetStatePropertyAll(
-                                    Size(fieldWidth, 44),
-                                  ),
-                                  alignment: Alignment.centerLeft,
-                                ),
-
-                                leadingIcon: const Icon(
-                                  Icons.search_rounded,
-                                  size: 18,
-                                ),
-
-                                onPressed: () {
-                                  _selectSuggestion(suggestion);
-                                },
-
-                                child: SizedBox(
-                                  width: double.infinity,
-                                  child: Text(
-                                    suggestion,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                          ],
-
-                          child: TextField(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            autofocus: true,
-                            textInputAction: TextInputAction.search,
-
-                            onChanged: _onSearchChanged,
-
-                            onSubmitted: (_) {
-                              _search();
-                            },
-
-                            decoration: const InputDecoration(
-                              labelText: 'Search tracks',
-                              hintText: 'Linkin Park Numb',
-                              prefixIcon: Icon(Icons.search_rounded),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  IconButton.filled(
-                    tooltip: 'Search',
-                    onPressed: _search,
-                    icon: const Icon(Icons.search_rounded),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-            ],
-
-            // CONTENT
-            Expanded(
-              child: _mode == _TrackPickerMode.search
-                  ? _buildSearchResults(
-                      searchState,
-                      savedKeys,
-                      savedState.value != null,
-                    )
-                  : _buildSavedTracks(savedState),
-            ),
           ],
-        ),
+
+          // CONTENT
+          Expanded(
+            child: _mode == _TrackPickerMode.search && _suggestions.isNotEmpty
+                ? ListView.builder(
+                    itemCount: _suggestions.length,
+                    itemBuilder: (context, index) => ListTile(
+                      leading: const Icon(Icons.search_rounded),
+                      title: Text(_suggestions[index]),
+                      onTap: () => _selectSuggestion(_suggestions[index]),
+                    ),
+                  )
+                : _mode == _TrackPickerMode.search
+                ? _buildSearchResults(
+                    searchState,
+                    savedKeys,
+                    savedState.value != null,
+                  )
+                : _buildSavedTracks(savedState),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-          child: const Text('Cancel'),
-        ),
-      ],
     );
   }
 
@@ -577,7 +519,8 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
                 _toggleFavorite(track);
               },
               onTap: () {
-                Navigator.of(context).pop(track);
+                FocusManager.instance.primaryFocus?.unfocus();
+                _selectTrack(track);
               },
             );
           },
@@ -673,7 +616,8 @@ class _TrackSearchDialogState extends ConsumerState<_TrackSearchDialog> {
                 _toggleFavorite(track);
               },
               onTap: () {
-                Navigator.of(context).pop(track);
+                FocusManager.instance.primaryFocus?.unfocus();
+                _selectTrack(track);
               },
             );
           },

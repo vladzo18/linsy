@@ -1,3 +1,5 @@
+import 'visible_player_engine.dart';
+import '../../../core/media/player_visibility.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -506,11 +508,21 @@ final playbackSynchronizerProvider = Provider.autoDispose.family<void, String>((
     return;
   }
 
-  final engine = ref.watch(playerEngineProvider);
+  final engine = VisiblePlayerEngine(
+    ref.watch(playerEngineProvider),
+    playerVisibility,
+  );
 
   final synchronizer = PlaybackSynchronizer(engine, serverClock);
 
   synchronizer.start();
+  void resyncVisiblePlayer() {
+    if (!playerVisibility.allowed) return;
+    final playback = ref.read(playbackControllerProvider(roomId)).value;
+    if (playback != null) synchronizer.update(playback);
+  }
+
+  playerVisibility.addListener(resyncVisiblePlayer);
 
   ref.listen(playbackControllerProvider(roomId), (previous, next) {
     final playback = next.value;
@@ -546,6 +558,8 @@ final playbackSynchronizerProvider = Provider.autoDispose.family<void, String>((
   ref.onDispose(() {
     unawaited(endedSubscription.cancel());
 
+    playerVisibility.removeListener(resyncVisiblePlayer);
     synchronizer.dispose();
+    engine.dispose();
   });
 });

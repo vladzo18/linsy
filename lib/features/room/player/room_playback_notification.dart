@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/media/player_visibility.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,7 +18,7 @@ class RoomPlaybackNotification {
   Future<void> _pending = Future.value();
   bool _disposed = false;
 
-  void update(PlaybackState state) {
+  void update(PlaybackState state, {bool locallyAllowed = true}) {
     if (_disposed) return;
     _pending = _pending
         .then((_) async {
@@ -30,7 +31,7 @@ class RoomPlaybackNotification {
               'title': state.title?.trim().isNotEmpty == true
                   ? state.title
                   : state.trackId,
-              'playing': state.isPlaying,
+              'playing': state.isPlaying && locallyAllowed,
               'positionMs': state.positionMs,
             });
           }
@@ -57,9 +58,25 @@ final roomPlaybackNotificationProvider = Provider.autoDispose
       if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
       final notification = RoomPlaybackNotification(roomId);
       final pip = ref.read(roomPipProvider.notifier);
+      void refreshNotification() {
+        final playback = ref.read(playbackControllerProvider(roomId)).value;
+        if (playback != null) {
+          notification.update(
+            playback,
+            locallyAllowed: playerVisibility.allowed,
+          );
+        }
+      }
+
+      playerVisibility.addListener(refreshNotification);
       ref.listen(playbackControllerProvider(roomId), (previous, next) {
         final playback = next.value;
-        if (playback != null) notification.update(playback);
+        if (playback != null) {
+          notification.update(
+            playback,
+            locallyAllowed: playerVisibility.allowed,
+          );
+        }
       }, fireImmediately: true);
       // Retry when returning to the app if Android rejected a background start.
       final lifecycle = ref.read(appLifecycleServiceProvider);
@@ -93,9 +110,15 @@ final roomPlaybackNotificationProvider = Provider.autoDispose
         }
         if (!lifecycle.isForeground) return;
         final playback = ref.read(playbackControllerProvider(roomId)).value;
-        if (playback != null) notification.update(playback);
+        if (playback != null) {
+          notification.update(
+            playback,
+            locallyAllowed: playerVisibility.allowed,
+          );
+        }
       });
       ref.onDispose(() {
+        playerVisibility.removeListener(refreshNotification);
         unawaited(pip.configure(false));
         diagnosticTimer?.cancel();
         if (kDebugMode) debugPrint('[BackgroundPlayback] session disposed');

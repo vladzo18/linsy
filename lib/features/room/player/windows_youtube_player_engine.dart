@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/media/player_visibility.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -210,6 +211,7 @@ class WindowsYoutubePlayerEngine implements PlayerEngine {
 
   Future<void> _send(Map<String, dynamic> message) async {
     await ready;
+    if (message['command'] == 'play' && !playerVisibility.allowed) return;
 
     if (_disposed) {
       return;

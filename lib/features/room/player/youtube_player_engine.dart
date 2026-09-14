@@ -1,3 +1,4 @@
+import '../../../core/media/player_visibility.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -46,7 +47,7 @@ class YoutubePlayerEngine implements PlayerEngine {
         enableCaption: false,
         playsInline: true,
         privacyEnhancedMode: true,
-        pointerEvents: PointerEvents.none,
+        pointerEvents: PointerEvents.auto,
 
         // Required for autoplay/preload.
         mute: true,
@@ -293,7 +294,7 @@ class YoutubePlayerEngine implements PlayerEngine {
 
     await controller.mute();
 
-    await controller.loadVideoById(
+    await controller.cueVideoById(
       videoId: trackId,
       startSeconds: startPositionMs / 1000.0,
     );
@@ -307,7 +308,7 @@ class YoutubePlayerEngine implements PlayerEngine {
   Future<void> play() async {
     await ready;
 
-    if (_trackId == null) {
+    if (_trackId == null || !playerVisibility.allowed) {
       return;
     }
 

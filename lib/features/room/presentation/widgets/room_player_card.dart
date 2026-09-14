@@ -7,12 +7,13 @@ import '../../domain/models/playback_state.dart';
 import '../../domain/models/room_queue_item.dart';
 import 'playback_timeline.dart';
 import 'room_player_overlay_phase.dart';
-import 'room_player_transition_overlay.dart';
+import 'room_up_next_bar.dart';
 import 'room_player_controls.dart';
 
 class RoomPlayerCard extends ConsumerWidget {
   const RoomPlayerCard({
     super.key,
+    this.compactHeader = false,
     required this.playback,
     required this.nextTrack,
     required this.livePositionMs,
@@ -26,6 +27,7 @@ class RoomPlayerCard extends ConsumerWidget {
   });
 
   final PlaybackState playback;
+  final bool compactHeader;
 
   final RoomQueueItem? nextTrack;
 
@@ -48,6 +50,62 @@ class RoomPlayerCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final serverClock = ref.watch(serverClockProvider).value;
+    if (compactHeader && playback.trackId != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 4,
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: PlayerSurface(trackId: playback.trackId),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 6,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    playback.title ?? 'Current track',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  Text(
+                    playback.isPlaying ? 'Playing' : 'Paused',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: playback.isPlaying ? 'Pause' : 'Play',
+                        onPressed: canControlPlayback
+                            ? onPlayPause
+                            : onRequestPlayPause,
+                        icon: Icon(
+                          playback.isPlaying
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Next track',
+                        onPressed: canControlPlayback ? onNext : onRequestNext,
+                        icon: const Icon(Icons.skip_next_rounded),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -97,13 +155,9 @@ class RoomPlayerCard extends ConsumerWidget {
 
         final effectiveNext = canControlPlayback ? onNext : onRequestNext;
 
-        final Future<void> Function() restartCurrent = canControlPlayback
-            ? () => onSeek(0)
-            : () => onRequestSeek(0);
-
         return Card(
           margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
+          clipBehavior: Clip.none,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -113,35 +167,24 @@ class RoomPlayerCard extends ConsumerWidget {
                   color: Colors.black,
                   child: Center(
                     child: hasTrack
-                        ? AspectRatio(
-                            aspectRatio: 16 / 9,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                PlayerSurface(trackId: trackId),
-
-                                if (overlayPhase != PlayerOverlayPhase.none)
-                                  PlayerTransitionOverlay(
-                                    phase: overlayPhase,
-                                    playback: playback,
-                                    nextTrack: nextTrack,
-                                    remainingSeconds: endingCountdownSeconds,
-                                    scheduledStartAt: scheduledStartAt,
-                                    now: () =>
-                                        serverClock?.now() ??
-                                        DateTime.now().toUtc(),
-                                    compact: compact,
-                                    canControlPlayback: canControlPlayback,
-                                    onRestart: restartCurrent,
-                                    onNext: effectiveNext,
-                                  ),
-                              ],
-                            ),
-                          )
+                        ? PlayerSurface(trackId: trackId)
                         : const EmptyPlayer(),
                   ),
                 ),
               ),
+
+              if (hasTrack && overlayPhase != PlayerOverlayPhase.none)
+                RoomUpNextBar(
+                  phase: overlayPhase,
+                  // During preparation the playback row already contains the
+                  // incoming track; the queue head points to the one after it.
+                  nextTitle: waitingForScheduledStart
+                      ? playback.title
+                      : nextTrack?.title,
+                  seconds: endingCountdownSeconds,
+                  scheduledStartAt: scheduledStartAt,
+                  now: () => serverClock?.now() ?? DateTime.now().toUtc(),
+                ),
 
               // CURRENT TRACK CONTROLS
               if (hasTrack)
